@@ -116,13 +116,17 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
             // Aniversários: a partir do dia em que cada um pediu para começar a lembrar, sempre no topo.
             val nivers = todos.filter { it.ehNiver && (it.diasParaNiver() ?: 999) <= it.lembrar }.sortedBy { it.diasParaNiver() }
             val pendentes = todos.filter { it.tipo != "aniversario" }
-            val ordem = nivers + pendentes.sortedWith(
-                compareBy<Item>(
-                    { if (it.atrasado || it.noDia(h)) 0 else 1 },
-                    { -it.prioridade },
-                    { it.data ?: "9999" },
-                    { it.hora },
-                ),
+            // Sempre por data (não por importância): atrasados primeiro (a data deles já passou), depois hoje,
+            // amanhã… Aniversários entram pela data do próximo; evento de vários dias acontecendo conta como hoje;
+            // sem data vai para o fim. No mesmo dia, o que é "o dia todo" vem antes e depois pela hora.
+            fun dataDe(i: Item): String = when {
+                i.ehNiver -> i.proximoNiver().toString()
+                i.data == null -> "9999-12-31"
+                i.variosDias && i.noDia(h) -> h
+                else -> i.data
+            }
+            val ordem = (nivers + pendentes).sortedWith(
+                compareBy<Item>({ dataDe(it) }, { it.hora }, { it.titulo.lowercase() }),
             )
             return Resumo(
                 logado = true,
