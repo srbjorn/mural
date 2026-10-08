@@ -39,6 +39,7 @@ data class Item(
     val niver: String? = null, // "MM-DD", só em aniversários
     val ano: Int? = null,
     val dataFim: String? = null, // "até que dia", em eventos de vários dias
+    val lembrar: Int = 7, // aniversários: quantos dias antes começa a lembrar (todo dia até chegar)
 ) {
     /** Último dia (igual a data quando o evento é de um dia só). */
     val fim get() = if (data != null && dataFim != null && dataFim > data) dataFim else data
@@ -65,7 +66,7 @@ data class Item(
         .put("id", id).put("tipo", tipo).put("titulo", titulo).put("prioridade", prioridade)
         .put("data", data ?: "").put("hora", hora).put("autor", autor)
         .put("criadoEm", criadoEm).put("feitos", feitos).put("total", total)
-        .put("niver", niver ?: "").put("ano", ano ?: 0).put("dataFim", dataFim ?: "")
+        .put("niver", niver ?: "").put("ano", ano ?: 0).put("dataFim", dataFim ?: "").put("lembrar", lembrar)
 
     companion object {
         fun de(d: DocumentSnapshot): Item {
@@ -85,6 +86,7 @@ data class Item(
                 niver = d.getString("niver")?.takeIf { it.isNotBlank() },
                 ano = d.getLong("ano")?.toInt(),
                 dataFim = d.getString("dataFim")?.takeIf { it.isNotBlank() },
+                lembrar = (d.getLong("lembrar") ?: 7L).toInt(),
             )
         }
 
@@ -94,6 +96,7 @@ data class Item(
             o.getLong("criadoEm"), o.getInt("feitos"), o.getInt("total"),
             o.optString("niver").ifBlank { null }, o.optInt("ano").takeIf { it > 0 },
             o.optString("dataFim").ifBlank { null },
+            o.optInt("lembrar", 7),
         )
     }
 }
@@ -110,8 +113,8 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
 
         fun montar(todos: List<Item>): Resumo {
             val h = LocalDate.now().toString()
-            // Aniversários: só os dos próximos 7 dias, sempre no topo.
-            val nivers = todos.filter { it.ehNiver && (it.diasParaNiver() ?: 99) <= 7 }.sortedBy { it.diasParaNiver() }
+            // Aniversários: a partir do dia em que cada um pediu para começar a lembrar, sempre no topo.
+            val nivers = todos.filter { it.ehNiver && (it.diasParaNiver() ?: 999) <= it.lembrar }.sortedBy { it.diasParaNiver() }
             val pendentes = todos.filter { it.tipo != "aniversario" }
             val ordem = nivers + pendentes.sortedWith(
                 compareBy<Item>(

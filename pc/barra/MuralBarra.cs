@@ -195,13 +195,74 @@ namespace Mural
     {
         public string Tipo, Titulo, Autor, Data, DataFim, Hora, Niver;
         public int Ano;
+        public int Lembrar = 7; // aniversários: quantos dias antes começa a lembrar
     }
 
     class Compromisso
     {
         public string Quando, Titulo, Autor, Hora;
         public DateTime Dia;
+        public DateTime? Alvo;   // quando acontece (para o "faltam…")
         public bool Atrasado, Niver, Atualizacao;
+        public Estacao Estacao;  // não nulo: "começa o verão" etc.
+
+        /// <summary>"faltam 3 dias e 5 h", "faltam 2 h 10 min"; vazio se já passou.</summary>
+        public string Falta()
+        {
+            if (Alvo == null || Atrasado || Atualizacao) return "";
+            var resto = Alvo.Value - DateTime.Now;
+            if (resto.TotalMinutes <= 0) return "";
+            var min = (int)Math.Ceiling(resto.TotalMinutes);
+            int dias = min / 1440, h = (min % 1440) / 60, m = min % 60;
+            if (dias >= 1) return "faltam " + dias + (dias > 1 ? " dias" : " dia") + (h > 0 ? " e " + h + " h" : "");
+            if (h >= 1) return "faltam " + h + " h" + (m > 0 ? " " + m + " min" : "");
+            return "faltam " + m + " min";
+        }
+    }
+
+    /// <summary>Estações do hemisfério sul, pelos equinócios e solstícios (algoritmo de Jean Meeus, erro de minutos).</summary>
+    class Estacao
+    {
+        public string Nome, Simbolo;
+        public Color Cor;
+        public DateTime Inicio; // horário local
+
+        static readonly double[,] Termos = {
+            {485,324.96,1934.136},{203,337.23,32964.467},{199,342.08,20.186},{182,27.85,445267.112},{156,73.14,45036.886},
+            {136,171.52,22518.443},{77,222.54,65928.934},{74,296.72,3034.906},{70,243.58,9037.513},{58,119.81,33718.147},
+            {52,297.17,150.678},{50,21.02,2281.226},{45,247.54,29929.562},{44,325.15,31555.956},{29,60.93,4443.417},
+            {18,155.12,67555.328},{17,288.79,4562.452},{16,198.04,62894.029},{14,199.76,31436.921},{12,95.39,14577.848},
+            {12,287.11,31931.756},{12,320.81,34777.259},{9,227.73,1222.114},{8,15.45,16859.074}};
+
+        static List<Estacao> DoAno(int ano)
+        {
+            double Y = (ano - 2000) / 1000.0;
+            var bases = new[] {
+                2451623.80984 + 365242.37404 * Y + 0.05169 * Y * Y - 0.00411 * Y * Y * Y - 0.00057 * Y * Y * Y * Y,
+                2451716.56767 + 365241.62603 * Y + 0.00325 * Y * Y + 0.00888 * Y * Y * Y - 0.00030 * Y * Y * Y * Y,
+                2451810.21715 + 365242.01767 * Y - 0.11575 * Y * Y + 0.00337 * Y * Y * Y + 0.00078 * Y * Y * Y * Y,
+                2451900.05952 + 365242.74049 * Y - 0.06223 * Y * Y - 0.00823 * Y * Y * Y + 0.00032 * Y * Y * Y * Y };
+            var nomes = new[] { "outono", "inverno", "primavera", "verão" };
+            var simbolos = new[] { "❦", "❄", "✿", "☀" };
+            var cores = new[] { Color.FromArgb(240, 144, 74), Color.FromArgb(116, 182, 240), Color.FromArgb(240, 140, 192), Color.FromArgb(245, 196, 67) };
+            var lista = new List<Estacao>();
+            for (int i = 0; i < 4; i++)
+            {
+                double jde0 = bases[i], T = (jde0 - 2451545) / 36525, rad = Math.PI / 180;
+                double W = (35999.373 * T - 2.47) * rad, dl = 1 + 0.0334 * Math.Cos(W) + 0.0007 * Math.Cos(2 * W), S = 0;
+                for (int k = 0; k < Termos.GetLength(0); k++) S += Termos[k, 0] * Math.Cos((Termos[k, 1] + Termos[k, 2] * T) * rad);
+                double jde = jde0 + 0.00001 * S / dl;
+                var utc = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddDays(jde - 2440587.5);
+                lista.Add(new Estacao { Nome = nomes[i], Simbolo = simbolos[i], Cor = cores[i], Inicio = utc.ToLocalTime() });
+            }
+            return lista;
+        }
+
+        public static Estacao Proxima()
+        {
+            var agora = DateTime.Now;
+            return DoAno(agora.Year).Concat(DoAno(agora.Year + 1)).First(e => e.Inicio > agora);
+        }
     }
 
     static class Dados
@@ -239,6 +300,7 @@ namespace Mural
                     Hora = Valor(f, "hora") ?? "",
                     Niver = Valor(f, "niver"),
                     DataFim = Valor(f, "dataFim"),
+                    Lembrar = LerInt(Valor(f, "lembrar"), 7),
                     Ano = ano
                 });
             }
@@ -255,6 +317,12 @@ namespace Mural
             if (d.TryGetValue("integerValue", out x)) return Convert.ToString(x, CultureInfo.InvariantCulture);
             if (d.TryGetValue("doubleValue", out x)) return Convert.ToString(Convert.ToInt64(x), CultureInfo.InvariantCulture);
             return null;
+        }
+
+        static int LerInt(string s, int padrao)
+        {
+            int v;
+            return int.TryParse(s, out v) ? v : padrao;
         }
 
         static DateTime DataNiver(int ano, int mes, int dia)
@@ -284,10 +352,10 @@ namespace Mural
                     }
                     catch { continue; }
                     var dias = (prox - hoje).Days;
-                    if (dias > 7) continue;
+                    if (dias > it.Lembrar) continue; // começa a lembrar só a partir do dia escolhido
                     lista.Add(new Compromisso
                     {
-                        Dia = prox, Niver = true, Autor = it.Autor, Hora = "",
+                        Dia = prox, Alvo = prox, Niver = true, Autor = it.Autor, Hora = "",
                         Titulo = "Aniversário de " + it.Titulo + (it.Ano > 1900 ? " (faz " + (prox.Year - it.Ano) + ")" : ""),
                         Quando = dias == 0 ? "Hoje!" : dias == 1 ? "Amanhã" : "Em " + dias + " dias"
                     });
@@ -311,8 +379,25 @@ namespace Mural
                 else quando = dia.ToString("ddd, d MMM", Config.PtBr).Replace(".", "");
                 if (fim > dia && !atrasado && !acontecendo) quando += " a " + fim.ToString("ddd", Config.PtBr).Replace(".", "");
                 if (!atrasado && !acontecendo && it.Hora != "") quando += " · " + it.Hora;
-                lista.Add(new Compromisso { Dia = acontecendo ? hoje : dia, Atrasado = atrasado, Autor = it.Autor, Hora = it.Hora, Titulo = it.Titulo, Quando = quando });
+                DateTime? alvo = dia;
+                TimeSpan hora;
+                if (it.Hora != "" && TimeSpan.TryParse(it.Hora, CultureInfo.InvariantCulture, out hora)) alvo = dia + hora;
+                lista.Add(new Compromisso { Dia = acontecendo ? hoje : dia, Alvo = acontecendo ? (DateTime?)null : alvo, Atrasado = atrasado, Autor = it.Autor, Hora = it.Hora, Titulo = it.Titulo, Quando = quando });
             }
+            // Estação chegando (até 7 dias antes)
+            try
+            {
+                var est = Estacao.Proxima();
+                var diasEst = (est.Inicio.Date - hoje).Days;
+                if (diasEst <= 7)
+                    lista.Add(new Compromisso
+                    {
+                        Estacao = est, Dia = est.Inicio.Date, Alvo = est.Inicio, Autor = "", Hora = "",
+                        Titulo = "Começa " + (est.Nome == "primavera" ? "a " : "o ") + est.Nome,
+                        Quando = diasEst == 0 ? "Hoje · " + est.Inicio.ToString("HH:mm") : diasEst == 1 ? "Amanhã" : est.Inicio.ToString("ddd, d MMM", Config.PtBr).Replace(".", "")
+                    });
+            }
+            catch { }
             return lista
                 .OrderBy(c => c.Atrasado ? 0 : 1)
                 .ThenBy(c => c.Dia)
@@ -325,9 +410,11 @@ namespace Mural
         {
             var h = DateTime.Today;
             return new List<Compromisso> {
-                new Compromisso { Dia = h, Autor = "yoshiro", Titulo = "Consulta no dentista", Quando = "Hoje · 15:30", Hora = "15:30" },
+                new Compromisso { Dia = h, Alvo = h.AddHours(23).AddMinutes(30), Autor = "yoshiro", Titulo = "Consulta no dentista", Quando = "Hoje · 23:30", Hora = "23:30" },
                 new Compromisso { Dia = h, Autor = "bjorn", Niver = true, Titulo = "Aniversário de Lucas (faz 30)", Quando = "Hoje!", Hora = "" },
-                new Compromisso { Dia = h.AddDays(1), Autor = "bjorn", Titulo = "Mercado da semana", Quando = "Amanhã", Hora = "" },
+                new Compromisso { Dia = h.AddDays(4), Alvo = h.AddDays(4), Autor = "yoshiro", Niver = true, Titulo = "Aniversário de Mari", Quando = "Em 4 dias", Hora = "" },
+                new Compromisso { Dia = h.AddDays(3), Alvo = h.AddDays(3).AddHours(17), Autor = "", Estacao = Estacao.Proxima(), Titulo = "Começa o verão (exemplo)", Quando = "Em 3 dias", Hora = "" },
+                new Compromisso { Dia = h.AddDays(1), Alvo = h.AddDays(1), Autor = "bjorn", Titulo = "Mercado da semana", Quando = "Amanhã", Hora = "" },
                 new Compromisso { Dia = h.AddDays(-1), Autor = "yoshiro", Atrasado = true, Titulo = "Pagar a conta de luz", Quando = "Atrasado", Hora = "" },
             };
         }
@@ -1001,8 +1088,8 @@ namespace Mural
 
             // Rosto de quem anotou, com anel na cor da pessoa
             var azul = Color.FromArgb(77, 163, 255);
-            var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Autor == "yoshiro" ? Verde : Roxo;
-            var rosto = c == null || c.Atualizacao ? null : c.Autor == "yoshiro" ? rostoY : rostoB;
+            var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : c.Autor == "yoshiro" ? Verde : Roxo;
+            var rosto = c == null || c.Atualizacao || c.Estacao != null ? null : c.Autor == "yoshiro" ? rostoY : rostoB;
             var rf = new Rectangle(pad, pad, face, face);
             if (rosto != null)
             {
@@ -1018,11 +1105,11 @@ namespace Mural
             else
             {
                 using (var b = new SolidBrush(Color.FromArgb(alfa, corPessoa))) g.FillEllipse(b, rf);
-                if (c != null && c.Atualizacao)
-                    using (var fs = new Font("Segoe UI Semibold", 11f))
-                    using (var bs = new SolidBrush(Color.White))
+                if (c != null && (c.Atualizacao || c.Estacao != null))
+                    using (var fs = new Font(c.Atualizacao ? "Segoe UI Semibold" : "Segoe UI Symbol", 11f))
+                    using (var bs = new SolidBrush(c.Atualizacao ? Color.White : Color.FromArgb(30, 33, 32)))
                     using (var centro = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                        g.DrawString("↑", fs, bs, rf, centro);
+                        g.DrawString(c.Atualizacao ? "↑" : c.Estacao.Simbolo, fs, bs, rf, centro);
             }
             using (var p = new Pen(corPessoa, Math.Max(2f, 2f * esc))) g.DrawEllipse(p, rf);
 
@@ -1042,9 +1129,12 @@ namespace Mural
             }
 
             // Duas linhas: quando (colorido) e o título
+            // Primeira linha: quando + quanto falta ("SEX, 16 OUT · FALTAM 7 DIAS E 19 H"). Aniversário mostra só o "faltam".
             var linha1 = c == null ? "Mural" : c.Quando;
+            var resta = c == null ? "" : c.Falta();
+            if (resta != "") linha1 = c.Niver && c.Quando != "Hoje!" ? resta : linha1 + " · " + resta;
             var linha2 = c == null ? aviso ?? "" : c.Titulo;
-            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
+            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
             if (claro && c != null && !c.Niver && !c.Atrasado) cor1 = c.Autor == "yoshiro" ? Color.FromArgb(23, 115, 75) : Color.FromArgb(116, 16, 196);
             var area = new RectangleF(xTexto, 0, Math.Max(10, direita - xTexto), Height);
             using (var f1 = new Font("Segoe UI Semibold", 7.5f))

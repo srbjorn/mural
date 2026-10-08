@@ -84,6 +84,89 @@ function proxNiver(it) {
 const faltam = (dias) => (dias === 0 ? "Hoje!" : dias === 1 ? "Amanhã" : `Em ${dias} dias`);
 const fmtNiver = (md) => { const [m, d] = md.split("-").map(Number); return `${d} de ${MESES[m - 1]}`; };
 const aniversarios = () => S.itens.filter(ehNiver).map((it) => ({ it, ...proxNiver(it) })).sort((a, b) => a.dias - b.dias || a.it.titulo.localeCompare(b.it.titulo));
+// Quantos dias antes o mural começa a lembrar do aniversário (e lembra todo dia até chegar). Padrão: 1 semana.
+const LEMBRAR = [[0, "No dia"], [1, "1 dia antes"], [3, "3 dias antes"], [7, "1 semana antes"], [14, "2 semanas antes"], [30, "1 mês antes"]];
+const lembrar = (it) => (Number.isFinite(Number(it.lembrar)) && it.lembrar !== null && it.lembrar !== "" ? Number(it.lembrar) : 7);
+const niversParaLembrar = () => aniversarios().filter((a) => a.dias <= lembrar(a.it));
+
+/* ============ Quanto falta ============ */
+/** Momento em que a coisa acontece: data + hora (ou 0h), ou o próximo aniversário. */
+function alvoDe(it) {
+  if (ehNiver(it)) return proxNiver(it).data;
+  if (!it.data) return null;
+  const d = new Date(it.data + "T00:00:00");
+  if (it.hora) { const [h, m] = it.hora.split(":").map(Number); d.setHours(h || 0, m || 0, 0, 0); }
+  return d;
+}
+/** "faltam 3 dias e 5 h", "faltam 2 h 10 min", "é hoje!", "acontecendo agora"; "" se já passou. */
+function falta(it) {
+  if (it.feito) return "";
+  if (ehNiver(it)) { if (proxNiver(it).dias === 0) return "é hoje!"; }
+  else {
+    if (!it.data || atrasado(it)) return "";
+    const h = hoje();
+    if (fim(it) !== it.data && noDia(it, h)) return "acontecendo agora";
+    if (it.data === h && !it.hora) return "é hoje";
+  }
+  const ms = alvoDe(it) - Date.now();
+  if (ms <= 0) return it.data === hoje() ? "já começou" : "";
+  const min = Math.ceil(ms / 60000), dias = Math.floor(min / 1440), horas = Math.floor((min % 1440) / 60), mins = min % 60;
+  if (dias >= 1) return `faltam ${dias} dia${dias > 1 ? "s" : ""}${horas ? ` e ${horas} h` : ""}`;
+  if (horas >= 1) return `faltam ${horas} h${mins ? ` ${mins} min` : ""}`;
+  return `faltam ${mins} min`;
+}
+const chipFalta = (it, extra = "") => { const f = falta(it); return f ? `<span class="falta ${extra}" data-falta="${esc(it.id)}">${f}</span>` : ""; };
+// Atualiza os "faltam…" na tela a cada 30 s sem redesenhar a página.
+setInterval(() => {
+  document.querySelectorAll("[data-falta]").forEach((el) => {
+    const it = S.itens.find((i) => i.id === el.dataset.falta);
+    if (it) el.textContent = falta(it);
+  });
+}, 30e3);
+
+/* ============ Estações do ano (hemisfério sul) ============ */
+// Equinócios e solstícios pelo algoritmo de Jean Meeus (Astronomical Algorithms, cap. 27): erro de minutos.
+const MEEUS = [[485, 324.96, 1934.136], [203, 337.23, 32964.467], [199, 342.08, 20.186], [182, 27.85, 445267.112], [156, 73.14, 45036.886],
+  [136, 171.52, 22518.443], [77, 222.54, 65928.934], [74, 296.72, 3034.906], [70, 243.58, 9037.513], [58, 119.81, 33718.147], [52, 297.17, 150.678],
+  [50, 21.02, 2281.226], [45, 247.54, 29929.562], [44, 325.15, 31555.956], [29, 60.93, 4443.417], [18, 155.12, 67555.328], [17, 288.79, 4562.452],
+  [16, 198.04, 62894.029], [14, 199.76, 31436.921], [12, 95.39, 14577.848], [12, 287.11, 31931.756], [12, 320.81, 34777.259], [9, 227.73, 1222.114], [8, 15.45, 16859.074]];
+const ESTACAO = {
+  outono: { nome: "Outono", cls: "outono", simbolo: "❦" },
+  inverno: { nome: "Inverno", cls: "inverno", simbolo: "❄" },
+  primavera: { nome: "Primavera", cls: "primavera", simbolo: "✿" },
+  verao: { nome: "Verão", cls: "verao", simbolo: "☀" },
+};
+const cacheEstacoes = {};
+function estacoesDoAno(ano) {
+  if (cacheEstacoes[ano]) return cacheEstacoes[ano];
+  const Y = (ano - 2000) / 1000, rad = Math.PI / 180;
+  const base = [ // março, junho, setembro, dezembro
+    2451623.80984 + 365242.37404 * Y + 0.05169 * Y ** 2 - 0.00411 * Y ** 3 - 0.00057 * Y ** 4,
+    2451716.56767 + 365241.62603 * Y + 0.00325 * Y ** 2 + 0.00888 * Y ** 3 - 0.0003 * Y ** 4,
+    2451810.21715 + 365242.01767 * Y - 0.11575 * Y ** 2 + 0.00337 * Y ** 3 + 0.00078 * Y ** 4,
+    2451900.05952 + 365242.74049 * Y - 0.06223 * Y ** 2 - 0.00823 * Y ** 3 + 0.00032 * Y ** 4,
+  ];
+  const nomes = ["outono", "inverno", "primavera", "verao"]; // no hemisfério sul
+  return (cacheEstacoes[ano] = base.map((jde0, i) => {
+    const T = (jde0 - 2451545) / 36525, W = (35999.373 * T - 2.47) * rad;
+    const dl = 1 + 0.0334 * Math.cos(W) + 0.0007 * Math.cos(2 * W);
+    const S = MEEUS.reduce((s, [A, B, C]) => s + A * Math.cos((B + C * T) * rad), 0);
+    const jde = jde0 + (0.00001 * S) / dl;
+    return { chave: nomes[i], ...ESTACAO[nomes[i]], inicio: new Date((jde - 2440587.5) * 864e5) };
+  }));
+}
+/** { atual, proxima } — cada uma com nome, início (Date) etc. */
+function estacaoAgora(agora = new Date()) {
+  const ano = agora.getFullYear();
+  const todas = [...estacoesDoAno(ano - 1), ...estacoesDoAno(ano), ...estacoesDoAno(ano + 1)];
+  let i = todas.findIndex((e) => e.inicio > agora);
+  return { atual: todas[i - 1], proxima: todas[i] };
+}
+const diasAte = (data) => { const h = new Date(); h.setHours(0, 0, 0, 0); const d = new Date(data); d.setHours(0, 0, 0, 0); return Math.round((d - h) / 864e5); };
+const inicioEstacaoEm = (ymdStr) => {
+  const ano = Number(ymdStr.slice(0, 4));
+  return estacoesDoAno(ano).find((e) => ymd(e.inicio) === ymdStr) || null;
+};
 
 /* ============ Regras dos itens ============ */
 function progresso(it) {
@@ -310,6 +393,8 @@ function topo() {
       </div>
       <div class="pills">
         <span class="pill hoje">${r.hoje} pra hoje</span>
+        ${pilulaEstacao()}
+        ${(() => { const nv = niversParaLembrar().filter((a) => a.dias > 0); return nv.length ? `<button class="pill niver" data-act="vista" data-v="niver">Aniversário chegando: ${esc(nv.map((a) => `${a.it.titulo} (${a.dias === 1 ? "amanhã" : `em ${a.dias} dias`})`).join(", "))}</button>` : ""; })()}
         ${r.niverHoje.length ? `<button class="pill niver" data-act="vista" data-v="niver">Aniversário hoje: ${esc(r.niverHoje.join(", "))}</button>` : ""}
         ${r.urgentes ? `<span class="pill p3">${r.urgentes} muito importante${r.urgentes > 1 ? "s" : ""}</span>` : ""}
         ${r.atrasados ? `<span class="pill p3">${r.atrasados} atrasad${r.atrasados > 1 ? "as" : "a"}</span>` : ""}
@@ -318,6 +403,15 @@ function topo() {
     </div>
     <div class="top-oc yo">${marca("yoshiro", "big")}<div class="who"><b>Yoshiro</b><span>${contagem("yoshiro")} pendentes</span></div></div>
   </header>`;
+}
+
+function pilulaEstacao() {
+  const { atual, proxima } = estacaoAgora();
+  if (!atual || !proxima) return "";
+  const d = diasAte(proxima.inicio);
+  const quando = d === 0 ? "hoje" : d === 1 ? "amanhã" : `em ${d} dias`;
+  const dataProx = proxima.inicio.toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
+  return `<span class="pill estacao ${atual.cls}" title="${esc(`${proxima.nome} começa em ${dataProx}, às ${proxima.inicio.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`)}"><b aria-hidden="true">${atual.simbolo}</b>${atual.nome} · ${proxima.nome.toLowerCase()} ${quando}</span>`;
 }
 
 function calendario() {
@@ -338,12 +432,18 @@ function calendario() {
     const d = new Date(inicio); d.setDate(inicio.getDate() + i);
     const s = ymd(d), lista = porDia[s] || [];
     const nv = nivers.filter((it) => ymd(dataNiver(d.getFullYear(), it.niver)) === s);
-    const cls = ["day", d.getMonth() !== m - 1 && "fora", s === h && "hoje", s === S.ui.dia && "sel"].filter(Boolean).join(" ");
+    const est = inicioEstacaoEm(s);
+    const cls = ["day", d.getMonth() !== m - 1 && "fora", s === h && "hoje", s === S.ui.dia && "sel", est && `estacao ${est.cls}`].filter(Boolean).join(" ");
     const dots = nv.slice(0, 2).map((it) => `<i class="dot niver ${CLS[it.autor] || ""}"></i>`).join("") +
       lista.slice(0, 4 - Math.min(nv.length, 2)).map((it) => `<i class="dot ${CLS[it.autor] || ""} ${Number(it.prioridade) === 3 ? "p3" : ""}"></i>`).join("");
-    const rot = `${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}${lista.length ? `, ${lista.length} ${lista.length > 1 ? "itens" : "item"}` : ""}${nv.length ? `, aniversário de ${nv.map((x) => x.titulo).join(" e ")}` : ""}`;
-    cel += `<button class="${cls}" data-act="dia" data-d="${s}" aria-label="${esc(rot)}" aria-pressed="${s === S.ui.dia}"><span>${d.getDate()}</span><span class="dots">${dots}</span></button>`;
+    const rot = `${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}${est ? `, começa ${est.chave === "primavera" ? "a" : "o"} ${est.nome.toLowerCase()}` : ""}${lista.length ? `, ${lista.length} ${lista.length > 1 ? "itens" : "item"}` : ""}${nv.length ? `, aniversário de ${nv.map((x) => x.titulo).join(" e ")}` : ""}`;
+    cel += `<button class="${cls}" data-act="dia" data-d="${s}" aria-label="${esc(rot)}" title="${esc(rot)}" aria-pressed="${s === S.ui.dia}">${est ? `<i class="est-marca" aria-hidden="true">${est.simbolo}</i>` : ""}<span>${d.getDate()}</span><span class="dots">${dots}</span></button>`;
   }
+  // Estação que começa neste mês (para a legenda embaixo do calendário).
+  const estMes = estacoesDoAno(y).find((e) => e.inicio.getMonth() === m - 1);
+  const legenda = estMes
+    ? `<p class="cal-estacao ${estMes.cls}"><b aria-hidden="true">${estMes.simbolo}</b>${estMes.chave === "primavera" ? "A" : "O"} ${estMes.nome.toLowerCase()} começa em ${estMes.inicio.toLocaleDateString("pt-BR", { day: "numeric", month: "long" })}, às ${estMes.inicio.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p>`
+    : (() => { const { atual } = estacaoAgora(new Date(y, m - 1, 15)); return atual ? `<p class="cal-estacao ${atual.cls}"><b aria-hidden="true">${atual.simbolo}</b>${atual.nome}</p>` : ""; })();
   return `
   <section class="panel sticker" aria-labelledby="h-cal">
     <div class="panel-h">
@@ -355,6 +455,7 @@ function calendario() {
       </div>
     </div>
     <div class="cal">${cel}</div>
+    ${legenda}
   </section>`;
 }
 
@@ -367,7 +468,7 @@ function proximosEventos() {
     const dias = fim(it) !== it.data ? (d.getMonth() === f.getMonth() ? `${d.getDate()}–${f.getDate()}` : `${d.getDate()}`) : `${d.getDate()}`;
     return `<li><button class="ev" data-act="editar" data-id="${esc(it.id)}">
       <span class="ev-date"><b>${dias}</b><span>${limpa(d.toLocaleDateString("pt-BR", { month: "short" }))}</span></span>
-      <span><span class="ev-t">${esc(it.titulo)}</span><span class="ev-s"><i class="dot ${CLS[it.autor]}"></i>${fmtQuando(it)}</span></span>
+      <span><span class="ev-t">${esc(it.titulo)}</span><span class="ev-s"><i class="dot ${CLS[it.autor]}"></i>${fmtQuando(it)}</span>${chipFalta(it, "linha")}</span>
     </button></li>`;
   }).join("");
   return `
@@ -399,7 +500,7 @@ function cartao(it) {
     <div class="prog"><div class="prog-l"><span>Progresso</span><span>${p}%</span></div><div class="bar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><i class="${c}" style="width:${p}%"></i></div></div>
     ${(it.checklist || []).length ? `<ul class="checks">${it.checklist.map((x, i) => `<li><label class="check ${x.ok ? "ok" : ""}"><input type="checkbox" data-act="ck" data-id="${esc(it.id)}" data-i="${i}" ${x.ok ? "checked" : ""}><span>${esc(x.t)}</span></label></li>`).join("")}</ul>` : ""}` : "";
   const badge = atrasado(it) ? `<span class="badge atraso">Atrasado</span>` : ehNovo(it) ? `<span class="badge novo ${c}">Novo</span>` : "";
-  const quando = it.data ? `<span class="when">${it.tipo === "meta" ? "Prazo: " : ""}${fmtQuando(it)}</span>` : "";
+  const quando = it.data ? `<span class="quando-linha"><span class="when">${it.tipo === "meta" ? "Prazo: " : ""}${fmtQuando(it)}</span>${chipFalta(it)}</span>` : "";
   const contagem = (it.checklist || []).length && it.tipo === "checklist" ? ` · ${it.checklist.filter((x) => x.ok).length}/${it.checklist.length}` : "";
   return `
   <article class="item sticker ${c} ${it.feito ? "feito" : ""}" data-card="${esc(it.id)}">
@@ -465,10 +566,11 @@ function cartaoNiver({ it, dias, idade }) {
     <div class="item-top">
       ${marca(q)}
       <div class="item-meta"><b class="${c}">${NOME[q] || "Alguém"}</b><span>anotou</span></div>
-      <span class="badge falta ${dias <= 7 ? "perto" : ""}">${faltam(dias)}</span>
+      <span class="badge falta ${dias <= lembrar(it) ? "perto" : ""}">${faltam(dias)}</span>
     </div>
     <h3 class="item-t">${esc(it.titulo)}</h3>
-    <span class="when">${fmtNiver(it.niver)}${idade ? ` · faz ${idade}` : ""}</span>
+    <span class="quando-linha"><span class="when">${fmtNiver(it.niver)}${idade ? ` · faz ${idade}` : ""}</span>${dias > 0 ? chipFalta(it) : ""}</span>
+    <span class="lembra">Lembrar: ${(LEMBRAR.find(([v]) => v === lembrar(it)) || [0, `${lembrar(it)} dias antes`])[1].toLowerCase()}${dias <= lembrar(it) && dias > 0 ? " · lembrando todo dia" : ""}</span>
     ${it.texto ? `<p class="item-x">${esc(it.texto)}</p>` : ""}
     <div class="item-foot">
       <button class="btn btn-small btn-ghost" data-act="editar" data-id="${esc(it.id)}">Editar</button>
@@ -508,7 +610,7 @@ function proximosNivers() {
   const lista = aniversarios().slice(0, 5);
   const lis = lista.map((a) => `<li><button class="ev" data-act="vista" data-v="niver">
       <span class="ev-date"><b>${a.data.getDate()}</b><span>${MESES[a.data.getMonth()].slice(0, 3)}</span></span>
-      <span><span class="ev-t">${esc(a.it.titulo)}</span><span class="ev-s"><i class="dot niver ${CLS[a.it.autor]}"></i>${faltam(a.dias)}${a.idade ? ` · faz ${a.idade}` : ""}</span></span>
+      <span><span class="ev-t">${esc(a.it.titulo)}</span><span class="ev-s"><i class="dot niver ${CLS[a.it.autor]}"></i>${faltam(a.dias)}${a.idade ? ` · faz ${a.idade}` : ""}</span>${a.dias > 0 ? chipFalta(a.it, "linha") : ""}</span>
     </button></li>`).join("");
   return `
   <section class="panel sticker" aria-labelledby="h-nv">
@@ -564,6 +666,7 @@ function prepararNiver() {
   const base = E.niver || (S.ui.dia || hoje()).slice(5);
   const [m, d] = base.split("-").map(Number);
   E.nm = m; E.nd = d; E.ano = E.ano || "";
+  E.lembrar = lembrar(E);
 }
 function renderEditor(focar) {
   if (!E) { $layer.innerHTML = ""; return; }
@@ -588,7 +691,11 @@ function renderEditor(focar) {
         <div class="field"><label for="ed-nd">Dia</label><select class="input" id="ed-nd" data-ed="nd">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${E.nd === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
         <div class="field"><label for="ed-nm">Mês</label><select class="input" id="ed-nm" data-ed="nm">${MESES.map((n, i) => `<option value="${i + 1}" ${E.nm === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div class="field"><label for="ed-ano">Ano em que nasceu (opcional)</label><input class="input" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}" id="ed-ano" data-ed="ano" value="${esc(E.ano || "")}" placeholder="Ex.: 1996"></div>
-      </div>` : `
+      </div>
+      <div class="field"><label for="ed-lb">Começar a lembrar</label>
+        <select class="input" id="ed-lb" data-ed="lembrar">${LEMBRAR.map(([v, l]) => `<option value="${v}" ${E.lembrar === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+      </div>
+      <p class="dica-campo">Repete todo ano sozinho. A partir do dia escolhido, o mural lembra vocês todo dia até o aniversário: no aviso do dia, no widget do celular, na barrinha do PC e na notificação das 8h.</p>` : `
       <div class="field"><span class="label">Importância</span><div class="seg prio">${prio}</div></div>
       <div class="${E.tipo === "evento" ? "row3 ev3" : "row2"}">
         <div class="field"><label for="ed-d">${E.tipo === "meta" ? "Prazo" : E.tipo === "evento" ? "Começa no dia" : "Dia (opcional)"}</label><input class="input" type="date" id="ed-d" data-ed="data" value="${esc(E.data || "")}"></div>
@@ -628,6 +735,7 @@ async function salvarEditor() {
     data: niver ? null : E.data || null, hora: niver ? "" : E.hora || "",
     dataFim: E.tipo === "evento" && E.dataFim && E.data && E.dataFim > E.data ? E.dataFim : null,
     niver: niver ? `${pad(E.nm)}-${pad(E.nd)}` : null, ano: niver && E.ano !== "" ? ano : null,
+    lembrar: niver ? Number(E.lembrar) : null,
     checklist: usaLista ? E.checklist.filter((x) => x.t.trim()).map((x) => ({ t: x.t.trim(), ok: !!x.ok })) : [],
     progresso: E.tipo === "meta" ? Number(E.progresso) || 0 : 0,
     atualizadoEm: Date.now(),
@@ -652,15 +760,18 @@ function abrirAviso() {
   const novos = S.itens.filter(ehNovo).sort((a, b) => b.criadoEm - a.criadoEm).slice(0, 6);
   const li = (it, extra) => `<li><i class="dot ${CLS[it.autor]}"></i>${esc(it.titulo)}<small>${extra ?? (it.data && fim(it) !== it.data ? fmtQuando(it) : it.hora || fmtDia(it.data) || TIPO[it.tipo])}</small></li>`;
   const sec = (t, arr, f) => (arr.length ? `<div class="aviso-sec"><h3>${t}</h3><ul>${arr.map(f || ((it) => li(it))).join("")}</ul></div>` : "");
-  const nivers = aniversarios().filter((a) => a.dias <= 7);
-  const nada = !deHoje.length && !atras.length && !urg.length && !novos.length && !nivers.length;
+  const nivers = niversParaLembrar();
+  const { proxima } = estacaoAgora();
+  const estChegando = proxima && diasAte(proxima.inicio) <= 7 ? proxima : null;
+  const nada = !deHoje.length && !atras.length && !urg.length && !novos.length && !nivers.length && !estChegando;
   $layer.innerHTML = `
   <div class="overlay" data-av="fundo">
     <section class="aviso sticker" role="dialog" aria-modal="true" aria-labelledby="h-av">
       <div class="aviso-oc bj" aria-hidden="true"></div>
       <div class="aviso-body">
         <h2 id="h-av">${saudacao()}, ${NOME[meu]}!</h2>
-        ${sec("Aniversários", nivers, (a) => `<li><i class="dot niver ${CLS[a.it.autor]}"></i>${esc(a.it.titulo)}${a.idade ? ` (faz ${a.idade})` : ""}<small>${faltam(a.dias)}</small></li>`)}
+        ${sec("Aniversários", nivers, (a) => `<li><i class="dot niver ${CLS[a.it.autor]}"></i>${esc(a.it.titulo)}${a.idade ? ` (faz ${a.idade})` : ""}<small>${a.dias === 0 ? "Hoje!" : falta(a.it)}</small></li>`)}
+        ${estChegando ? `<div class="aviso-sec"><h3>Estação</h3><ul><li class="estacao ${estChegando.cls}"><b aria-hidden="true">${estChegando.simbolo}</b>${estChegando.chave === "primavera" ? "A" : "O"} ${estChegando.nome.toLowerCase()} começa ${diasAte(estChegando.inicio) === 0 ? "hoje" : diasAte(estChegando.inicio) === 1 ? "amanhã" : `em ${diasAte(estChegando.inicio)} dias`}<small>${estChegando.inicio.toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(".", "")}, ${estChegando.inicio.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></li></ul></div>` : ""}
         ${sec(`Novidades do ${NOME[dele]}`, novos, (it) => li(it, TIPO[it.tipo]))}
         ${sec("Hoje", deHoje)}
         ${sec("Atrasados", atras)}
@@ -789,7 +900,7 @@ document.addEventListener("input", (ev) => {
   if (k === "titulo" || k === "texto" || k === "data" || k === "hora" || k === "dataFim") E[k] = t.value;
   if (k === "data") { const df = document.getElementById("ed-df"); if (df) df.min = t.value; }
   else if (k === "ano") E.ano = t.value.trim();
-  else if (k === "nd" || k === "nm") E[k] = Number(t.value);
+  else if (k === "nd" || k === "nm" || k === "lembrar") E[k] = Number(t.value);
   else if (k === "ckt") E.checklist[Number(t.dataset.i)].t = t.value;
   else if (k === "progresso") { E.progresso = Number(t.value); document.getElementById("ed-pv").textContent = t.value + "%"; }
 });
