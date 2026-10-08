@@ -1,16 +1,25 @@
 rules_version = '2';
-// Cole isto em Firebase → Firestore Database → Regras → Publicar.
-// Só quem tem conta no projeto entra. Depois que vocês dois criarem as contas,
-// desligue novas contas em Authentication → Configurações → Ações do usuário
-// ("Ativar criação (inscrição)"), e ninguém mais consegue se cadastrar.
+// Regras do mural (Firebase → Firestore Database → Regras → Publicar).
+//
+// Só entra quem já tem um documento em /pessoas (o Bjørn e o Yoshiro), e ninguém cria documento novo
+// lá pelo app. Mesmo que alguém consiga criar uma conta, não lê nem escreve nada.
+// O bot do Telegram (firebase-admin) não passa por estas regras.
+//
+// Para cadastrar alguém novo no futuro: adicione temporariamente, dentro de match /pessoas/{uid},
+//   allow create: if request.auth != null && request.auth.uid == uid;
+// a pessoa entra no mural e escolhe quem é; depois apague essa linha e publique de novo.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function doCasal() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/pessoas/$(request.auth.uid));
+    }
     match /itens/{id} {
-      allow read, write: if request.auth != null;
+      allow read, write: if doCasal();
     }
     match /pessoas/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if doCasal();
+      allow update: if doCasal() && request.auth.uid == uid;
     }
   }
 }
