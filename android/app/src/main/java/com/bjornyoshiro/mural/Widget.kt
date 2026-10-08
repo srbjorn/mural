@@ -12,6 +12,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
@@ -103,13 +105,14 @@ private fun abrirApp(ctx: Context, extra: String?): Action {
 private fun estilo(cor: Color, tam: Int, negrito: Boolean = false) =
     TextStyle(color = ColorProvider(cor), fontSize = tam.sp, fontWeight = if (negrito) FontWeight.Bold else FontWeight.Normal)
 
+/** Rosto da figurinha (PNG já redondo), com anel na cor de cada um: Bjørn roxo, Yoshiro verde. */
 @Composable
-private fun Marca(letra: String, cor: Color, tam: Int = 26) {
+private fun Rosto(imagem: Int, nome: String, cor: Color, tam: Int = 34) {
     Box(
-        GlanceModifier.size(tam.dp).background(cor).cornerRadius((tam / 2).dp),
+        GlanceModifier.size(tam.dp).background(cor).cornerRadius((tam / 2).dp).padding(2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(letra, style = estilo(if (cor == VERDE) FUNDO else Color.White, tam / 2, true))
+        Image(ImageProvider(imagem), contentDescription = nome, modifier = GlanceModifier.size((tam - 4).dp))
     }
 }
 
@@ -122,9 +125,9 @@ private fun Conteudo(r: Resumo?) {
 
     Column(GlanceModifier.fillMaxSize().background(FUNDO).cornerRadius(22.dp).padding(12.dp)) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Marca("B", VERDE)
+            Rosto(R.drawable.rosto_bjorn, "Bjørn", ROXO)
             Spacer(GlanceModifier.width(4.dp))
-            Marca("Y", ROXO)
+            Rosto(R.drawable.rosto_yoshiro, "Yoshiro", VERDE)
             Column(GlanceModifier.defaultWeight().padding(horizontal = 10.dp).clickable(abrir)) {
                 Text(hoje, style = estilo(TEXTO, 16, true), maxLines = 1)
                 val sub = when {
@@ -165,7 +168,7 @@ private fun Aviso(texto: String, abrir: Action) {
 @Composable
 private fun Linha(it: Item, abrir: Action) {
     val corPrio = when (it.prioridade) { 3 -> P3; 2 -> P2; else -> P1 }
-    val corAutor = if (it.autor == "yoshiro") ROXO else VERDE
+    val corAutor = if (it.autor == "yoshiro") VERDE else ROXO
     val tipo = when (it.tipo) { "checklist" -> "Checklist"; "evento" -> "Evento"; "meta" -> "Meta"; else -> "Anotação" }
     val detalhe = buildString {
         append(tipo)

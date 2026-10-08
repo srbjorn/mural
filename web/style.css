@@ -10,12 +10,14 @@
   --shadow: #1e2120;
   --soft-line: #cfd4cf;
 
-  --bj: #46c98f;          /* verde do Bjørn */
-  --bj-ink: #17734b;
-  --bj-wash: #dff5ea;
-  --yo: #a400ff;          /* roxo do Yoshiro */
-  --yo-ink: #7410c4;
-  --yo-wash: #f0e0ff;
+  --bj: #a400ff;          /* roxo do Bjørn */
+  --bj-ink: #7410c4;
+  --bj-wash: #f0e0ff;
+  --bj-on: #ffffff;       /* texto sobre o roxo */
+  --yo: #46c98f;          /* verde do Yoshiro */
+  --yo-ink: #17734b;
+  --yo-wash: #dff5ea;
+  --yo-on: #0d2a1c;       /* texto sobre o verde */
 
   --p3: #e5484d;          /* muito importante */
   --p3-wash: #fde4e4;
@@ -35,7 +37,7 @@
   :root:not([data-theme="light"]) {
     --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
     --line: #48504c; --shadow: #000000; --soft-line: #343a37;
-    --bj-ink: #63e3a9; --bj-wash: #163428; --yo-ink: #c98bff; --yo-wash: #2c1840;
+    --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
     --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
     color-scheme: dark;
   }
@@ -43,7 +45,7 @@
 :root[data-theme="dark"] {
   --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
   --line: #48504c; --shadow: #000000; --soft-line: #343a37;
-  --bj-ink: #63e3a9; --bj-wash: #163428; --yo-ink: #c98bff; --yo-wash: #2c1840;
+  --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
   --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
   color-scheme: dark;
 }
@@ -96,20 +98,21 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 }
 .gate-oc {
   align-self: stretch; min-height: 320px; border: 2px solid var(--line); border-radius: var(--r);
-  box-shadow: 4px 4px 0 var(--shadow); display: flex; align-items: flex-end; padding: 24px;
+  box-shadow: 4px 4px 0 var(--shadow); display: flex; flex-direction: column; justify-content: flex-end; gap: 16px; padding: 24px;
 }
 .gate-oc span { font-family: var(--f-display); font-size: clamp(28px, 3vw, 44px); line-height: 1; }
-.gate-oc.bj { background: var(--bj); color: #0d2a1c; }
-.gate-oc.yo { background: var(--yo); color: #fff; justify-content: flex-end; }
+.gate-oc.bj { background: var(--bj); color: var(--bj-on); }
+.gate-oc.yo { background: var(--yo); color: var(--yo-on); align-items: flex-end; }
 
-/* Marca de cor de cada um */
+/* Foto de perfil: rosto da figurinha, com anel na cor de cada um */
 .mk {
-  width: 38px; height: 38px; flex: none; border-radius: 50%; border: 2px solid var(--line);
-  display: inline-grid; place-items: center; font-family: var(--f-display); font-size: 18px; line-height: 1;
+  width: 40px; height: 40px; flex: none; border-radius: 50%; display: block;
+  object-fit: cover; border: 3px solid var(--line); background: var(--card);
 }
-.mk.bj { background: var(--bj); color: #0d2a1c; }
-.mk.yo { background: var(--yo); color: #fff; }
-.mk.big { width: 64px; height: 64px; font-size: 30px; box-shadow: 3px 3px 0 var(--shadow); }
+.mk.bj { border-color: var(--bj); }
+.mk.yo { border-color: var(--yo); }
+.mk.big { width: 64px; height: 64px; box-shadow: 3px 3px 0 var(--shadow); }
+.mk.huge { width: clamp(120px, 12vw, 180px); height: auto; aspect-ratio: 1; border: 4px solid var(--line); box-shadow: 4px 4px 0 var(--shadow); }
 .gate-card { padding: 28px; display: grid; gap: 16px; }
 .gate-card h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(26px, 3vw, 34px); line-height: 1.2; }
 .gate-card h1 .bj { color: var(--bj-ink); }
@@ -239,8 +242,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   background: transparent; font-weight: 700; font-size: 15px;
 }
 .chip[aria-pressed="true"] { border-color: var(--line); background: var(--ink); color: var(--paper); }
-.chip.bj[aria-pressed="true"] { background: var(--bj); color: #0d2a1c; border-color: var(--line); }
-.chip.yo[aria-pressed="true"] { background: var(--yo); color: #fff; border-color: var(--line); }
+.chip.bj[aria-pressed="true"] { background: var(--bj); color: var(--bj-on); border-color: var(--line); }
+.chip.yo[aria-pressed="true"] { background: var(--yo); color: var(--yo-on); border-color: var(--line); }
 .sep { width: 2px; align-self: stretch; background: var(--soft-line); }
 .dia-ativo { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 
@@ -342,7 +345,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   body { font-size: 16px; }
   .board { grid-template-columns: minmax(0, 1fr); padding-bottom: 110px; }
   .top { grid-template-columns: 1fr 1fr; gap: 12px 8px; padding-block: 12px; }
-  .top-oc .mk.big { width: 48px; height: 48px; font-size: 22px; }
+  .top-oc .mk.big { width: 52px; height: 52px; }
   .top-oc .who b { font-size: 17px; }
   .top-oc .who span { font-size: 14px; }
   .top-mid { grid-column: 1 / -1; grid-row: 2; }

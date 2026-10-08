@@ -3,8 +3,9 @@ import { firebaseConfig } from "./firebase-config.js";
 /* ============ Constantes ============ */
 const NOME = { bjorn: "Bjørn", yoshiro: "Yoshiro" };
 const CLS = { bjorn: "bj", yoshiro: "yo" };
-// Marca de cor de cada um (círculo com a inicial).
-const marca = (q, extra = "") => `<span class="mk ${CLS[q] || ""} ${extra}" aria-hidden="true">${(NOME[q] || "?")[0]}</span>`;
+// Foto de perfil: rosto da figurinha de cada um, com anel na cor dele (Bjørn roxo, Yoshiro verde).
+const ROSTO = { bjorn: "img/rosto-bjorn.webp", yoshiro: "img/rosto-yoshiro.webp" };
+const marca = (q, extra = "") => `<img class="mk ${CLS[q] || ""} ${extra}" src="${ROSTO[q] || ROSTO.bjorn}" alt="" aria-hidden="true">`;
 const TIPO = { nota: "Anotação", checklist: "Checklist", evento: "Evento", meta: "Meta" };
 const TIPO_PLURAL = { tudo: "Tudo", nota: "Anotações", checklist: "Checklists", evento: "Eventos", meta: "Metas" };
 const PRIO = { 3: "Muito importante", 2: "Importante", 1: "Menos importante" };
@@ -196,7 +197,7 @@ function telaEntrada() {
   const criar = S.modo === "criar";
   return `
   <div class="gate">
-    <div class="gate-oc bj" aria-hidden="true"><span>Bjørn</span></div>
+    <div class="gate-oc bj" aria-hidden="true">${marca("bjorn", "huge")}<span>Bjørn</span></div>
     <form class="gate-card sticker" id="f-entrar" novalidate>
       <h1>Mural do <span class="bj">Bjørn</span> &amp; do <span class="yo">Yoshiro</span></h1>
       <p>${criar ? "Crie a sua conta. Cada um de vocês usa a própria." : "Entre com a sua conta para ver o que vocês dois anotaram."}</p>
@@ -206,7 +207,7 @@ function telaEntrada() {
       <button class="btn btn-main" type="submit">${criar ? "Criar conta" : "Entrar"}</button>
       <button class="btn btn-ghost" type="button" data-act="modo">${criar ? "Já tenho conta" : "Primeira vez? Criar conta"}</button>
     </form>
-    <div class="gate-oc yo" aria-hidden="true"><span>Yoshiro</span></div>
+    <div class="gate-oc yo" aria-hidden="true">${marca("yoshiro", "huge")}<span>Yoshiro</span></div>
   </div>`;
 }
 
@@ -218,8 +219,8 @@ function telaQuem() {
       <h1>Quem é você?</h1>
       <p>Isso aparece nas suas anotações, para o outro saber quem escreveu.</p>
       <div class="picker">
-        <button class="pick bj" data-act="souu" data-q="bjorn">${marca("bjorn", "big")}Sou o Bjørn</button>
-        <button class="pick yo" data-act="souu" data-q="yoshiro">${marca("yoshiro", "big")}Sou o Yoshiro</button>
+        <button class="pick bj" data-act="souu" data-q="bjorn">${marca("bjorn", "huge")}Sou o Bjørn</button>
+        <button class="pick yo" data-act="souu" data-q="yoshiro">${marca("yoshiro", "huge")}Sou o Yoshiro</button>
       </div>
       <button class="btn btn-ghost" data-act="sair">Sair desta conta</button>
     </div>
