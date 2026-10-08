@@ -1,0 +1,11 @@
+{
+  "name": "Mural Bjørn & Yoshiro",
+  "short_name": "Mural",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#eceeea",
+  "theme_color": "#1e2120",
+  "icons": [
+    { "src": "img/icone.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

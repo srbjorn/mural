@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Mural" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">#FF121413</item>
+        <item name="android:navigationBarColor">#FF121413</item>
+    </style>
+    <color name="fundo">#FF121413</color>
+</resources>

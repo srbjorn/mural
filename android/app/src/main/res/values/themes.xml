@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema claro: o WebView usa isso para decidir o modo claro/escuro da página. -->
+    <style name="Mural" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:statusBarColor">#FF1E2120</item>
+        <item name="android:navigationBarColor">#FF1E2120</item>
+    </style>
+    <color name="fundo">#FFECEEEA</color>
+</resources>

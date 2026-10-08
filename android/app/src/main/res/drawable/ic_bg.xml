@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fundo do ícone: verde do Bjørn e roxo do Yoshiro em diagonal. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#46C98F" android:pathData="M0,0L62,0L46,108L0,108Z" />
+    <path android:fillColor="#A400FF" android:pathData="M62,0L108,0L108,108L46,108Z" />
+</vector>

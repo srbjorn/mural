@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "742821132511",
+    "project_id": "mural-bjorn-yoshiro",
+    "storage_bucket": "mural-bjorn-yoshiro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:742821132511:android:a413729d0fd432698d116a",
+        "android_client_info": {
+          "package_name": "com.bjornyoshiro.mural"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6cMs5ZVepH43t8WuoVQT7hSw1NeouFcM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
