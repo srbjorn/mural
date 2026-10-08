@@ -48,7 +48,7 @@ jobs:
           dono=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "MURAL_SITE=https://$dono.github.io/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
           if [ -n "$KS" ]; then
-            echo "$KS" | base64 -d > "$RUNNER_TEMP/mural.p12"
+            printf '%s' "$KS" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/mural.p12"
             echo "MURAL_KEYSTORE=$RUNNER_TEMP/mural.p12" >> "$GITHUB_ENV"
           else
             echo "::warning::Sem MURAL_KEYSTORE_B64: o APK sai com chave temporária e não atualiza por cima da versão anterior."
