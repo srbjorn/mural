@@ -1,5 +1,6 @@
 ﻿# Instala o Mural neste PC:
 #  - abre sozinho com o aviso do dia toda vez que o Windows inicia;
+#  - põe a barrinha com os compromissos mais próximos dentro da barra de tarefas (MuralBarra.exe);
 #  - cria atalhos na Área de Trabalho e no menu Iniciar (clique direito → "Fixar em Iniciar").
 # Para desfazer: rode de novo com -Remover.
 param(
@@ -8,15 +9,19 @@ param(
 )
 
 $pasta = Join-Path $env:LOCALAPPDATA "Mural"
+$inicializar = [Environment]::GetFolderPath("Startup")
 $atalhos = @(
-    @{ Caminho = Join-Path ([Environment]::GetFolderPath("Startup")) "Mural (aviso do dia).lnk"; Hash = "#aviso" },
+    @{ Caminho = Join-Path $inicializar "Mural (aviso do dia).lnk"; Hash = "#aviso" },
     @{ Caminho = Join-Path ([Environment]::GetFolderPath("Desktop")) "Mural.lnk"; Hash = "" },
     @{ Caminho = Join-Path ([Environment]::GetFolderPath("Programs")) "Mural.lnk"; Hash = "" }
 )
+$atalhoBarra = Join-Path $inicializar "Mural na barra de tarefas.lnk"
+$barra = Join-Path $pasta "MuralBarra.exe"
 
 if ($Remover) {
-    foreach ($a in $atalhos) { if (Test-Path $a.Caminho) { Remove-Item $a.Caminho -Confirm:$false } }
-    if (Test-Path $pasta) { Remove-Item $pasta -Recurse -Confirm:$false }
+    if (Test-Path $barra) { Start-Process $barra -ArgumentList "--fechar" -Wait; Start-Sleep 1 }
+    foreach ($c in @($atalhos.Caminho) + $atalhoBarra) { if (Test-Path $c) { Remove-Item -LiteralPath $c -Confirm:$false } }
+    if (Test-Path $pasta) { Remove-Item -LiteralPath $pasta -Recurse -Confirm:$false }
     Write-Host "Mural removido deste PC."
     return
 }
@@ -46,6 +51,19 @@ foreach ($a in $atalhos) {
     $lnk.Save()
 }
 
+# Barrinha na barra de tarefas: fecha a versão antiga (se houver), copia a nova e abre.
+$barraOrigem = Join-Path $PSScriptRoot "MuralBarra.exe"
+if (Test-Path $barraOrigem) {
+    if (Test-Path $barra) { Start-Process $barra -ArgumentList "--fechar" -Wait; Start-Sleep 2 }
+    Copy-Item $barraOrigem $barra -Force
+    $lnk = $shell.CreateShortcut($atalhoBarra)
+    $lnk.TargetPath = $barra
+    $lnk.Description = "Compromissos do Mural na barra de tarefas"
+    $lnk.Save()
+    Start-Process $barra
+}
+
 Write-Host "Pronto! O Mural abre sozinho quando o Windows iniciar."
+Write-Host "A barrinha com os próximos compromissos fica ao lado do relógio (na primeira vez ela pede o login)."
 Write-Host "Atalhos criados na Área de Trabalho e no menu Iniciar."
 Write-Host "Para deixar fixo no Iniciar ou na barra de tarefas: clique direito no atalho → Fixar."
