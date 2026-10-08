@@ -36,13 +36,31 @@ data class Item(
     val criadoEm: Long,
     val feitos: Int,
     val total: Int,
+    val niver: String? = null, // "MM-DD", só em aniversários
+    val ano: Int? = null,
 ) {
     val atrasado get() = data != null && data < LocalDate.now().toString()
+    val ehNiver get() = tipo == "aniversario" && niver != null && Regex("""\d\d-\d\d""").matches(niver)
+
+    /** Próxima data do aniversário (29/02 vira 28/02 em ano não bissexto). */
+    fun proximoNiver(): LocalDate? {
+        if (!ehNiver) return null
+        val (m, d) = niver!!.split("-").map { it.toInt() }
+        fun em(y: Int): LocalDate =
+            if (m == 2 && d == 29 && !java.time.Year.isLeap(y.toLong())) LocalDate.of(y, 2, 28) else LocalDate.of(y, m, d)
+        val h = LocalDate.now()
+        val este = em(h.year)
+        return if (este.isBefore(h)) em(h.year + 1) else este
+    }
+
+    fun diasParaNiver(): Long? = proximoNiver()?.let { java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), it) }
+    fun idade(): Int? = if (ano != null && ano > 1900) proximoNiver()?.year?.minus(ano) else null
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("tipo", tipo).put("titulo", titulo).put("prioridade", prioridade)
         .put("data", data ?: "").put("hora", hora).put("autor", autor)
         .put("criadoEm", criadoEm).put("feitos", feitos).put("total", total)
+        .put("niver", niver ?: "").put("ano", ano ?: 0)
 
     companion object {
         fun de(d: DocumentSnapshot): Item {
@@ -59,6 +77,8 @@ data class Item(
                 criadoEm = d.getLong("criadoEm") ?: 0L,
                 feitos = lista.count { it["ok"] == true },
                 total = lista.size,
+                niver = d.getString("niver")?.takeIf { it.isNotBlank() },
+                ano = d.getLong("ano")?.toInt(),
             )
         }
 
@@ -66,6 +86,7 @@ data class Item(
             o.getString("id"), o.getString("tipo"), o.getString("titulo"), o.getInt("prioridade"),
             o.getString("data").ifBlank { null }, o.getString("hora"), o.getString("autor"),
             o.getLong("criadoEm"), o.getInt("feitos"), o.getInt("total"),
+            o.optString("niver").ifBlank { null }, o.optInt("ano").takeIf { it > 0 },
         )
     }
 }
@@ -80,9 +101,12 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
     companion object {
         val deslogado = Resumo(false, 0, 0, 0, emptyList())
 
-        fun montar(pendentes: List<Item>): Resumo {
+        fun montar(todos: List<Item>): Resumo {
             val h = LocalDate.now().toString()
-            val ordem = pendentes.sortedWith(
+            // Aniversários: só os dos próximos 7 dias, sempre no topo.
+            val nivers = todos.filter { it.ehNiver && (it.diasParaNiver() ?: 99) <= 7 }.sortedBy { it.diasParaNiver() }
+            val pendentes = todos.filter { it.tipo != "aniversario" }
+            val ordem = nivers + pendentes.sortedWith(
                 compareBy<Item>(
                     { if (it.atrasado || it.data == h) 0 else 1 },
                     { -it.prioridade },

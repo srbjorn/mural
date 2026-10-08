@@ -19,6 +19,8 @@
   --yo-wash: #dff5ea;
   --yo-on: #0d2a1c;       /* texto sobre o verde */
 
+  --festa: #d6336c;       /* aniversários */
+  --festa-wash: #fde2ec;
   --p3: #e5484d;          /* muito importante */
   --p3-wash: #fde4e4;
   --p2: #d98b00;          /* importante */
@@ -38,6 +40,7 @@
     --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
     --line: #48504c; --shadow: #000000; --soft-line: #343a37;
     --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
+    --festa: #ff7aa8; --festa-wash: #3b1626;
     --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
     color-scheme: dark;
   }
@@ -46,6 +49,7 @@
   --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
   --line: #48504c; --shadow: #000000; --soft-line: #343a37;
   --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
+  --festa: #ff7aa8; --festa-wash: #3b1626;
   --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
   color-scheme: dark;
 }
@@ -280,6 +284,29 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 .empty-board { padding: 28px; text-align: center; display: grid; gap: 10px; justify-items: center; border: 2px dashed var(--soft-line); border-radius: var(--r); }
 
+/* Quadro | Aniversários */
+.vistas { display: inline-flex; gap: 4px; padding: 4px; border: 2px solid var(--line); border-radius: 999px; background: var(--sunk); }
+.vistas button {
+  min-height: 40px; padding: 4px 16px; border: 0; border-radius: 999px; background: transparent;
+  font-family: var(--f-display); font-size: 18px; display: inline-flex; align-items: center; gap: 8px;
+}
+.vistas button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.vistas button[aria-selected="true"][data-v="niver"] { background: var(--festa); color: #fff; }
+.vn { font-family: var(--f-body); font-weight: 700; font-size: 14px; min-width: 24px; padding: 0 6px; border-radius: 999px; background: var(--card); color: var(--ink); }
+.pill.niver { background: var(--festa-wash); color: var(--festa); border-color: var(--festa); }
+.niver-faixa {
+  text-align: left; padding: 10px 14px; border-radius: 12px; border: 2px dashed var(--festa);
+  background: var(--festa-wash); color: var(--festa); font-weight: 700;
+}
+.dot.niver { border-radius: 2px; transform: rotate(45deg); box-shadow: 0 0 0 2px var(--festa); }
+.badge.falta { color: var(--ink-2); background: var(--sunk); }
+.badge.falta.perto { color: var(--festa); background: var(--festa-wash); }
+.niver-card.hoje { border-color: var(--festa); box-shadow: 4px 4px 0 var(--festa); }
+.mes-grupo { display: grid; gap: 12px; }
+.mes-h { font-family: var(--f-display); font-weight: 400; font-size: 20px; color: var(--festa); padding-top: 4px; border-top: 2px dashed var(--soft-line); }
+.mes-grupo:first-of-type .mes-h { border-top: 0; }
+.row3 { display: grid; grid-template-columns: 0.8fr 1.4fr 1.4fr; gap: 12px; }
+
 .meta-list { display: grid; gap: 14px; }
 .meta { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--sunk); border: 0; text-align: left; width: 100%; }
 .meta-t { font-weight: 700; display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
@@ -360,6 +387,9 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   .gate-oc { display: none; }
   .aviso { grid-template-columns: 10px minmax(0, 1fr) 10px; }
   .row2 { grid-template-columns: 1fr; }
+  .row3 { grid-template-columns: 1fr 1.6fr; }
+  .row3 .field:last-child { grid-column: 1 / -1; }
+  .vistas button { padding: 4px 12px; font-size: 16px; }
   .fab { left: var(--gut); right: var(--gut); }
   .overlay { padding: 0; align-items: end; }
   .sheet, .aviso { width: 100%; max-height: 92vh; border-radius: var(--r) var(--r) 0 0; }

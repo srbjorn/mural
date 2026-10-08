@@ -58,6 +58,7 @@ private val ROXO = Color(0xFFA400FF)
 private val P3 = Color(0xFFFF6B6F)
 private val P2 = Color(0xFFF2B33D)
 private val P1 = Color(0xFF6F7974)
+private val FESTA = Color(0xFFFF7AA8) // aniversários
 
 object WidgetDados {
     val CHAVE = stringPreferencesKey("resumo")
@@ -167,16 +168,19 @@ private fun Aviso(texto: String, abrir: Action) {
 
 @Composable
 private fun Linha(it: Item, abrir: Action) {
-    val corPrio = when (it.prioridade) { 3 -> P3; 2 -> P2; else -> P1 }
+    val dias = it.diasParaNiver()
+    val corPrio = if (dias != null) FESTA else when (it.prioridade) { 3 -> P3; 2 -> P2; else -> P1 }
     val corAutor = if (it.autor == "yoshiro") VERDE else ROXO
-    val tipo = when (it.tipo) { "checklist" -> "Checklist"; "evento" -> "Evento"; "meta" -> "Meta"; else -> "Anotação" }
+    val tipo = when (it.tipo) { "checklist" -> "Checklist"; "evento" -> "Evento"; "meta" -> "Meta"; "aniversario" -> "Aniversário"; else -> "Anotação" }
     val detalhe = buildString {
         append(tipo)
+        it.idade()?.let { idade -> append(" · faz $idade") }
         if (it.total > 0) append(" · ${it.feitos}/${it.total}")
         append(if (it.autor == "yoshiro") " · Yoshiro" else " · Bjørn")
     }
     val h = LocalDate.now().toString()
     val quando = when {
+        dias != null -> when (dias) { 0L -> "Hoje!"; 1L -> "Amanhã"; else -> "Em $dias dias" }
         it.data == null -> ""
         it.atrasado -> "Atrasado"
         it.data == h -> if (it.hora.isNotEmpty()) it.hora else "Hoje"
@@ -198,7 +202,7 @@ private fun Linha(it: Item, abrir: Action) {
             }
             if (quando.isNotEmpty()) {
                 Spacer(GlanceModifier.width(6.dp))
-                Text(quando, style = estilo(if (it.atrasado) P3 else TEXTO, 12, true), maxLines = 1)
+                Text(quando, style = estilo(if (dias != null) FESTA else if (it.atrasado) P3 else TEXTO, 12, true), maxLines = 1)
             }
         }
     }

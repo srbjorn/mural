@@ -44,9 +44,14 @@ object Avisos {
             if (r.urgentes > 0) add("${r.urgentes} muito importante" + if (r.urgentes > 1) "s" else "")
             if (r.atrasados > 0) add("${r.atrasados} atrasad" + if (r.atrasados > 1) "as" else "a")
         }
-        val lista = r.itens.take(4).joinToString("\n") { "• " + it.titulo }
+        val niverHoje = r.itens.filter { it.diasParaNiver() == 0L }.map { it.titulo }
+        val lista = r.itens.filter { it.diasParaNiver() != 0L }.take(4).joinToString("\n") { item ->
+            val d = item.diasParaNiver()
+            "• " + item.titulo + when (d) { null -> ""; 1L -> " (aniversário amanhã)"; else -> " (aniversário em $d dias)" }
+        }
         val texto = partes.joinToString(" · ") + if (lista.isNotEmpty()) "\n$lista" else ""
-        mostrar(ctx, 1, "Mural de hoje", texto, "aviso")
+        val titulo = if (niverHoje.isNotEmpty()) "Hoje é aniversário de ${niverHoje.joinToString(" e ")}" else "Mural de hoje"
+        mostrar(ctx, 1, titulo, texto, "aviso")
     }
 
     private fun mostrar(ctx: Context, id: Int, titulo: String, texto: String, abrir: String) {

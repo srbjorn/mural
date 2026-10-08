@@ -6,7 +6,8 @@ const CLS = { bjorn: "bj", yoshiro: "yo" };
 // Foto de perfil: rosto da figurinha de cada um, com anel na cor dele (Bjørn roxo, Yoshiro verde).
 const ROSTO = { bjorn: "img/rosto-bjorn.webp", yoshiro: "img/rosto-yoshiro.webp" };
 const marca = (q, extra = "") => `<img class="mk ${CLS[q] || ""} ${extra}" src="${ROSTO[q] || ROSTO.bjorn}" alt="" aria-hidden="true">`;
-const TIPO = { nota: "Anotação", checklist: "Checklist", evento: "Evento", meta: "Meta" };
+const TIPO = { nota: "Anotação", checklist: "Checklist", evento: "Evento", meta: "Meta", aniversario: "Aniversário" };
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const TIPO_PLURAL = { tudo: "Tudo", nota: "Anotações", checklist: "Checklists", evento: "Eventos", meta: "Metas" };
 const PRIO = { 3: "Muito importante", 2: "Importante", 1: "Menos importante" };
 const outro = (q) => (q === "bjorn" ? "yoshiro" : "bjorn");
@@ -57,11 +58,32 @@ const S = {
   pronto: false,
   erro: "",
   modo: "entrar",      // tela de entrada: entrar | criar
-  ui: Object.assign({ prio: 3, tipo: "tudo", autor: "todos", concluidos: false, mes: hoje().slice(0, 7), dia: null }, ler("mural-ui", {})),
+  ui: Object.assign({ vista: "quadro", prio: 3, tipo: "tudo", autor: "todos", concluidos: false, mes: hoje().slice(0, 7), dia: null }, ler("mural-ui", {})),
 };
 const eu = () => S.pessoas[S.user?.uid]?.quem || null;
 const vistoEm = () => S.pessoas[S.user?.uid]?.vistoEm || 0;
-function salvarUi() { guardar("mural-ui", { prio: S.ui.prio, tipo: S.ui.tipo, autor: S.ui.autor, concluidos: S.ui.concluidos }); }
+function salvarUi() { guardar("mural-ui", { vista: S.ui.vista, prio: S.ui.prio, tipo: S.ui.tipo, autor: S.ui.autor, concluidos: S.ui.concluidos }); }
+
+/* ============ Aniversários ============ */
+// Guardados com niver: "MM-DD" e ano (opcional); repetem todo ano e ficam fora das abas de importância.
+const ehNiver = (it) => it.tipo === "aniversario" && /^\d\d-\d\d$/.test(it.niver || "");
+const bissexto = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+function dataNiver(y, md) {
+  const [m, d] = md.split("-").map(Number);
+  return m === 2 && d === 29 && !bissexto(y) ? new Date(y, 1, 28) : new Date(y, m - 1, d);
+}
+/** Próxima vez que o aniversário acontece: { data, dias, idade } (idade só se o ano for conhecido). */
+function proxNiver(it) {
+  const h = new Date(); h.setHours(0, 0, 0, 0);
+  let d = dataNiver(h.getFullYear(), it.niver);
+  if (d < h) d = dataNiver(h.getFullYear() + 1, it.niver);
+  const dias = Math.round((d - h) / 864e5);
+  const idade = Number(it.ano) > 1900 ? d.getFullYear() - Number(it.ano) : null;
+  return { data: d, dias, idade };
+}
+const faltam = (dias) => (dias === 0 ? "Hoje!" : dias === 1 ? "Amanhã" : `Em ${dias} dias`);
+const fmtNiver = (md) => { const [m, d] = md.split("-").map(Number); return `${d} de ${MESES[m - 1]}`; };
+const aniversarios = () => S.itens.filter(ehNiver).map((it) => ({ it, ...proxNiver(it) })).sort((a, b) => a.dias - b.dias || a.it.titulo.localeCompare(b.it.titulo));
 
 /* ============ Regras dos itens ============ */
 function progresso(it) {
@@ -71,7 +93,7 @@ function progresso(it) {
 }
 const atrasado = (it) => !it.feito && it.data && it.data < hoje();
 const ehNovo = (it) => it.autor && it.autor !== eu() && (it.criadoEm || 0) > vistoEm();
-const pendentes = () => S.itens.filter((i) => !i.feito);
+const pendentes = () => S.itens.filter((i) => !i.feito && i.tipo !== "aniversario");
 function ordenar(a, b) {
   const aa = atrasado(a) ? 0 : 1, bb = atrasado(b) ? 0 : 1;
   if (aa !== bb) return aa - bb;
@@ -86,6 +108,7 @@ function resumo() {
     urgentes: p.filter((i) => Number(i.prioridade) === 3).length,
     atrasados: p.filter(atrasado).length,
     novos: S.itens.filter(ehNovo).length,
+    niverHoje: aniversarios().filter((a) => a.dias === 0).map((a) => a.it.titulo),
   };
 }
 
@@ -131,6 +154,9 @@ function backendDemo() {
     { id: "d5", tipo: "evento", titulo: "Aniversário de namoro", texto: "", prioridade: 3, data: somaDias(h, 6), hora: "20:00", autor: "bjorn", criadoEm: agora - 7 * 86400e3 },
     { id: "d6", tipo: "nota", titulo: "Pagar a conta de luz", texto: "Vence amanhã, boleto no email.", prioridade: 3, data: somaDias(h, -1), hora: "", autor: "yoshiro", criadoEm: agora - 600e3 },
     { id: "d7", tipo: "meta", titulo: "Treinar 3x por semana", texto: "", prioridade: 1, data: null, hora: "", autor: "bjorn", criadoEm: agora - 9 * 86400e3, progresso: 40, checklist: [] },
+    { id: "d8", tipo: "aniversario", titulo: "Lucas", texto: "Gosta de jogo de tabuleiro.", prioridade: 0, data: null, hora: "", niver: h.slice(5), ano: 1996, autor: "yoshiro", criadoEm: agora - 20 * 86400e3 },
+    { id: "d9", tipo: "aniversario", titulo: "Mari", texto: "", prioridade: 0, data: null, hora: "", niver: somaDias(h, 4).slice(5), ano: null, autor: "bjorn", criadoEm: agora - 30 * 86400e3 },
+    { id: "d10", tipo: "aniversario", titulo: "Tia Rose", texto: "Ligar de manhã.", prioridade: 0, data: null, hora: "", niver: somaDias(h, 45).slice(5), ano: 1970, autor: "bjorn", criadoEm: agora - 40 * 86400e3 },
   ];
   let pessoas = { demo: { quem: "bjorn", vistoEm: agora - 2 * 3600e3 } };
   const fi = new Set(), fp = new Set();
@@ -246,6 +272,7 @@ function topo() {
       </div>
       <div class="pills">
         <span class="pill hoje">${r.hoje} pra hoje</span>
+        ${r.niverHoje.length ? `<button class="pill niver" data-act="vista" data-v="niver">Aniversário hoje: ${esc(r.niverHoje.join(", "))}</button>` : ""}
         ${r.urgentes ? `<span class="pill p3">${r.urgentes} muito importante${r.urgentes > 1 ? "s" : ""}</span>` : ""}
         ${r.atrasados ? `<span class="pill p3">${r.atrasados} atrasad${r.atrasados > 1 ? "as" : "a"}</span>` : ""}
         ${r.novos ? `<button class="pill novo ${CLS[dele]}" data-act="visto">${r.novos} novidade${r.novos > 1 ? "s" : ""} do ${NOME[dele]} · marcar como visto</button>` : ""}
@@ -262,14 +289,17 @@ function calendario() {
   const nomeMes = primeiro.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const porDia = {};
   for (const it of S.itens) if (it.data && !it.feito) (porDia[it.data] ||= []).push(it);
+  const nivers = S.itens.filter(ehNiver);
   const h = hoje();
   let cel = ["D", "S", "T", "Q", "Q", "S", "S"].map((w) => `<div class="wd" aria-hidden="true">${w}</div>`).join("");
   for (let i = 0; i < 42; i++) {
     const d = new Date(inicio); d.setDate(inicio.getDate() + i);
     const s = ymd(d), lista = porDia[s] || [];
+    const nv = nivers.filter((it) => ymd(dataNiver(d.getFullYear(), it.niver)) === s);
     const cls = ["day", d.getMonth() !== m - 1 && "fora", s === h && "hoje", s === S.ui.dia && "sel"].filter(Boolean).join(" ");
-    const dots = lista.slice(0, 4).map((it) => `<i class="dot ${CLS[it.autor] || ""} ${Number(it.prioridade) === 3 ? "p3" : ""}"></i>`).join("");
-    const rot = `${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}${lista.length ? `, ${lista.length} ${lista.length > 1 ? "itens" : "item"}` : ""}`;
+    const dots = nv.slice(0, 2).map((it) => `<i class="dot niver ${CLS[it.autor] || ""}"></i>`).join("") +
+      lista.slice(0, 4 - Math.min(nv.length, 2)).map((it) => `<i class="dot ${CLS[it.autor] || ""} ${Number(it.prioridade) === 3 ? "p3" : ""}"></i>`).join("");
+    const rot = `${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}${lista.length ? `, ${lista.length} ${lista.length > 1 ? "itens" : "item"}` : ""}${nv.length ? `, aniversário de ${nv.map((x) => x.titulo).join(" e ")}` : ""}`;
     cel += `<button class="${cls}" data-act="dia" data-d="${s}" aria-label="${esc(rot)}" aria-pressed="${s === S.ui.dia}"><span>${d.getDate()}</span><span class="dots">${dots}</span></button>`;
   }
   return `
@@ -361,15 +391,85 @@ function quadro() {
       <p class="vazio">${u.dia ? `Nada em ${fmtDia(u.dia).toLowerCase()} nesta aba.` : `Nada ${u.prio === 3 ? "muito importante" : u.prio === 2 ? "importante" : "menos importante"} pendente${u.tipo !== "tudo" ? ` em ${TIPO_PLURAL[u.tipo].toLowerCase()}` : ""}.`}</p>
       <button class="btn" data-act="novo">+ Anotar aqui</button>
     </div>`;
+  const nvDia = u.dia ? S.itens.filter((it) => ehNiver(it) && ymd(dataNiver(Number(u.dia.slice(0, 4)), it.niver)) === u.dia) : [];
   return `
   <section class="panel sticker" aria-labelledby="h-q">
-    <div class="panel-h"><h2 id="h-q">Quadro</h2>
+    <div class="panel-h">${vistas()}
       <label class="check"><input type="checkbox" data-act="concl" ${u.concluidos ? "checked" : ""}><span>Mostrar concluídos</span></label>
     </div>
     <div class="tabs" role="tablist" aria-label="Importância">${tabs}</div>
     <div class="filters"><div class="chips">${chipsTipo}</div><span class="sep"></span><div class="chips">${chipsAutor}</div></div>
     ${u.dia ? `<div class="dia-ativo">Mostrando ${esc(fmtDia(u.dia).toLowerCase())} <button class="btn btn-small" data-act="dia" data-d="${u.dia}">Ver todos os dias</button></div>` : ""}
+    ${nvDia.length ? `<button class="niver-faixa" data-act="vista" data-v="niver">Aniversário neste dia: ${esc(nvDia.map((x) => x.titulo).join(", "))}</button>` : ""}
     ${lista.length ? `<div class="cards">${lista.map(cartao).join("")}</div>` : vazio}
+  </section>`;
+}
+
+/** Troca entre o Quadro e a aba de Aniversários (cabeçalho do painel central). */
+function vistas() {
+  const v = S.ui.vista, n = S.itens.filter(ehNiver).length;
+  return `<div class="vistas" role="tablist" aria-label="Seção">
+    <button role="tab" aria-selected="${v === "quadro"}" data-act="vista" data-v="quadro">Quadro</button>
+    <button role="tab" aria-selected="${v === "niver"}" data-act="vista" data-v="niver">Aniversários <span class="vn">${n}</span></button>
+  </div>`;
+}
+
+function cartaoNiver({ it, dias, idade }) {
+  const q = it.autor, c = CLS[q] || "";
+  return `
+  <article class="item niver-card sticker ${c} ${dias === 0 ? "hoje" : ""}">
+    <div class="item-top">
+      ${marca(q)}
+      <div class="item-meta"><b class="${c}">${NOME[q] || "Alguém"}</b><span>anotou</span></div>
+      <span class="badge falta ${dias <= 7 ? "perto" : ""}">${faltam(dias)}</span>
+    </div>
+    <h3 class="item-t">${esc(it.titulo)}</h3>
+    <span class="when">${fmtNiver(it.niver)}${idade ? ` · faz ${idade}` : ""}</span>
+    ${it.texto ? `<p class="item-x">${esc(it.texto)}</p>` : ""}
+    <div class="item-foot">
+      <button class="btn btn-small btn-ghost" data-act="editar" data-id="${esc(it.id)}">Editar</button>
+      <button class="btn btn-small btn-ghost btn-danger" data-act="apagar" data-id="${esc(it.id)}">Excluir</button>
+    </div>
+  </article>`;
+}
+
+function abaNiver() {
+  const lista = aniversarios().filter((a) => S.ui.autor === "todos" || a.it.autor === S.ui.autor);
+  // Agrupa por mês, começando no mês atual (a lista já vem na ordem do próximo aniversário).
+  const grupos = [];
+  for (const a of lista) {
+    const nome = MESES[a.data.getMonth()] + (a.data.getFullYear() > new Date().getFullYear() ? ` de ${a.data.getFullYear()}` : "");
+    const g = grupos.at(-1);
+    if (g && g.nome === nome) g.itens.push(a); else grupos.push({ nome, itens: [a] });
+  }
+  const chipsAutor = [["todos", "Nós dois", ""], ["bjorn", "Bjørn", "bj"], ["yoshiro", "Yoshiro", "yo"]]
+    .map(([v, l, c]) => `<button class="chip ${c}" aria-pressed="${S.ui.autor === v}" data-act="autor" data-a="${v}">${l}</button>`).join("");
+  return `
+  <section class="panel sticker" aria-label="Aniversários">
+    <div class="panel-h">${vistas()}<button class="btn btn-small btn-main" data-act="novo" data-tipo="aniversario">+ Aniversário</button></div>
+    <div class="filters"><div class="chips">${chipsAutor}</div></div>
+    ${grupos.length ? grupos.map((g) => `
+      <div class="mes-grupo">
+        <h3 class="mes-h">${esc(g.nome.charAt(0).toUpperCase() + g.nome.slice(1))}</h3>
+        <div class="cards">${g.itens.map(cartaoNiver).join("")}</div>
+      </div>`).join("") : `
+      <div class="empty-board">
+        <p class="vazio">Nenhum aniversário anotado ainda. Guarde aqui o dia de cada amigo e da família; o mural avisa vocês quando estiver chegando.</p>
+        <button class="btn" data-act="novo" data-tipo="aniversario">+ Aniversário</button>
+      </div>`}
+  </section>`;
+}
+
+function proximosNivers() {
+  const lista = aniversarios().slice(0, 5);
+  const lis = lista.map((a) => `<li><button class="ev" data-act="vista" data-v="niver">
+      <span class="ev-date"><b>${a.data.getDate()}</b><span>${MESES[a.data.getMonth()].slice(0, 3)}</span></span>
+      <span><span class="ev-t">${esc(a.it.titulo)}</span><span class="ev-s"><i class="dot niver ${CLS[a.it.autor]}"></i>${faltam(a.dias)}${a.idade ? ` · faz ${a.idade}` : ""}</span></span>
+    </button></li>`).join("");
+  return `
+  <section class="panel sticker" aria-labelledby="h-nv">
+    <div class="panel-h"><h2 id="h-nv">Aniversários</h2><button class="btn btn-small" data-act="novo" data-tipo="aniversario">+ Aniversário</button></div>
+    ${lis ? `<ul class="ev-list">${lis}</ul>` : `<p class="vazio">Nenhum aniversário anotado. Use “+ Aniversário” para guardar o dia de um amigo.</p>`}
   </section>`;
 }
 
@@ -397,8 +497,8 @@ function telaPainel() {
   ${DEMO ? `<p class="banner">Demonstração com dados de exemplo. ${configurado ? "" : "O Firebase ainda não foi configurado (web/firebase-config.js)."}</p>` : ""}
   <main class="board">
     <div class="col">${calendario()}${proximosEventos()}</div>
-    <div class="col col-main">${quadro()}</div>
-    <div class="col">${metas()}</div>
+    <div class="col col-main">${S.ui.vista === "niver" ? abaNiver() : quadro()}</div>
+    <div class="col">${proximosNivers()}${metas()}</div>
   </main>
   <button class="btn fab" data-act="novo">+ Anotar</button>`;
 }
@@ -410,11 +510,20 @@ function abrirEditor(it, preset = {}) {
     ? { ...it, checklist: (it.checklist || []).map((x) => ({ ...x })), confirmar: false }
     : { id: null, tipo: "nota", titulo: "", texto: "", prioridade: S.ui.prio, data: S.ui.dia || "", hora: "", checklist: [], progresso: 0, feito: false, ...preset };
   if (E.tipo === "evento" && !E.data) E.data = hoje();
+  prepararNiver();
   renderEditor(true);
+}
+/** Dia e mês do aniversário no editor (vêm de niver "MM-DD", do dia escolhido no calendário ou de hoje). */
+function prepararNiver() {
+  if (E.nd) return;
+  const base = E.niver || (S.ui.dia || hoje()).slice(5);
+  const [m, d] = base.split("-").map(Number);
+  E.nm = m; E.nd = d; E.ano = E.ano || "";
 }
 function renderEditor(focar) {
   if (!E) { $layer.innerHTML = ""; return; }
   const comLista = E.tipo === "checklist" || E.tipo === "meta";
+  const niver = E.tipo === "aniversario";
   const seg = Object.entries(TIPO).map(([v, l]) => `<button type="button" data-ed="tipo" data-v="${v}" aria-pressed="${E.tipo === v}">${l}</button>`).join("");
   const prio = [3, 2, 1].map((p) => `<button type="button" data-ed="prio" data-v="${p}" aria-pressed="${Number(E.prioridade) === p}">${PRIO[p]}</button>`).join("");
   const linhas = E.checklist.map((x, i) => `
@@ -428,13 +537,19 @@ function renderEditor(focar) {
     <form class="sheet sticker" id="f-ed" role="dialog" aria-modal="true" aria-labelledby="h-ed" novalidate>
       <h2 id="h-ed">${E.id ? "Editar" : "Nova anotação"}</h2>
       <div class="field"><span class="label">Tipo</span><div class="seg">${seg}</div></div>
-      <div class="field"><label for="ed-t">Título</label><input class="input" id="ed-t" data-ed="titulo" value="${esc(E.titulo)}" maxlength="140" placeholder="${E.tipo === "evento" ? "Ex.: Jantar com a família" : E.tipo === "meta" ? "Ex.: Guardar dinheiro pra viagem" : E.tipo === "checklist" ? "Ex.: Mercado" : "Ex.: Lembrar de pagar a internet"}"></div>
+      <div class="field"><label for="ed-t">${niver ? "Nome de quem faz aniversário" : "Título"}</label><input class="input" id="ed-t" data-ed="titulo" value="${esc(E.titulo)}" maxlength="140" placeholder="${niver ? "Ex.: Lucas" : E.tipo === "evento" ? "Ex.: Jantar com a família" : E.tipo === "meta" ? "Ex.: Guardar dinheiro pra viagem" : E.tipo === "checklist" ? "Ex.: Mercado" : "Ex.: Lembrar de pagar a internet"}"></div>
+      ${niver ? `
+      <div class="row3">
+        <div class="field"><label for="ed-nd">Dia</label><select class="input" id="ed-nd" data-ed="nd">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${E.nd === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
+        <div class="field"><label for="ed-nm">Mês</label><select class="input" id="ed-nm" data-ed="nm">${MESES.map((n, i) => `<option value="${i + 1}" ${E.nm === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+        <div class="field"><label for="ed-ano">Ano em que nasceu (opcional)</label><input class="input" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}" id="ed-ano" data-ed="ano" value="${esc(E.ano || "")}" placeholder="Ex.: 1996"></div>
+      </div>` : `
       <div class="field"><span class="label">Importância</span><div class="seg prio">${prio}</div></div>
       <div class="row2">
         <div class="field"><label for="ed-d">${E.tipo === "meta" ? "Prazo" : "Dia"}${E.tipo === "evento" ? "" : " (opcional)"}</label><input class="input" type="date" id="ed-d" data-ed="data" value="${esc(E.data || "")}"></div>
         <div class="field"><label for="ed-h">Hora (opcional)</label><input class="input" type="time" id="ed-h" data-ed="hora" value="${esc(E.hora || "")}"></div>
-      </div>
-      <div class="field"><label for="ed-x">Detalhes (opcional)</label><textarea class="textarea" id="ed-x" data-ed="texto">${esc(E.texto)}</textarea></div>
+      </div>`}
+      <div class="field"><label for="ed-x">${niver ? "Ideias de presente e anotações (opcional)" : "Detalhes (opcional)"}</label><textarea class="textarea" id="ed-x" data-ed="texto">${esc(E.texto)}</textarea></div>
       ${comLista ? `<div class="field"><span class="label">${E.tipo === "meta" ? "Etapas da meta" : "Itens da lista"}</span><div class="ck-edit">${linhas}</div>
         <button type="button" class="btn btn-small" data-ed="ckadd">+ ${E.tipo === "meta" ? "Etapa" : "Item"}</button></div>` : ""}
       ${E.tipo === "meta" && !E.checklist.length ? `<div class="field"><label for="ed-p">Progresso: <span id="ed-pv">${progresso(E)}%</span></label><input class="range" type="range" min="0" max="100" step="5" id="ed-p" data-ed="progresso" value="${progresso(E)}"></div>` : ""}
@@ -453,12 +568,17 @@ function renderEditor(focar) {
 async function salvarEditor() {
   const erro = document.getElementById("ed-erro");
   const titulo = E.titulo.trim();
-  if (!titulo) { erro.textContent = "Escreva um título."; document.getElementById("ed-t").focus(); return; }
+  const niver = E.tipo === "aniversario";
+  if (!titulo) { erro.textContent = niver ? "Escreva o nome de quem faz aniversário." : "Escreva um título."; document.getElementById("ed-t").focus(); return; }
   if (E.tipo === "evento" && !E.data) { erro.textContent = "Evento precisa de um dia."; document.getElementById("ed-d").focus(); return; }
+  if (niver && E.nd > new Date(2024, E.nm, 0).getDate()) { erro.textContent = `${MESES[E.nm - 1]} não tem dia ${E.nd}.`; document.getElementById("ed-nd").focus(); return; }
+  const ano = Number(E.ano);
+  if (niver && E.ano !== "" && (ano < 1900 || ano > new Date().getFullYear())) { erro.textContent = "Ano de nascimento inválido (ou deixe em branco)."; document.getElementById("ed-ano").focus(); return; }
   const usaLista = E.tipo === "checklist" || E.tipo === "meta";
   const o = {
-    tipo: E.tipo, titulo, texto: E.texto.trim(), prioridade: Number(E.prioridade),
-    data: E.data || null, hora: E.hora || "",
+    tipo: E.tipo, titulo, texto: E.texto.trim(), prioridade: niver ? 0 : Number(E.prioridade) || 1,
+    data: niver ? null : E.data || null, hora: niver ? "" : E.hora || "",
+    niver: niver ? `${pad(E.nm)}-${pad(E.nd)}` : null, ano: niver && E.ano !== "" ? ano : null,
     checklist: usaLista ? E.checklist.filter((x) => x.t.trim()).map((x) => ({ t: x.t.trim(), ok: !!x.ok })) : [],
     progresso: E.tipo === "meta" ? Number(E.progresso) || 0 : 0,
     atualizadoEm: Date.now(),
@@ -483,13 +603,15 @@ function abrirAviso() {
   const novos = S.itens.filter(ehNovo).sort((a, b) => b.criadoEm - a.criadoEm).slice(0, 6);
   const li = (it, extra) => `<li><i class="dot ${CLS[it.autor]}"></i>${esc(it.titulo)}<small>${extra ?? (it.hora || fmtDia(it.data) || TIPO[it.tipo])}</small></li>`;
   const sec = (t, arr, f) => (arr.length ? `<div class="aviso-sec"><h3>${t}</h3><ul>${arr.map(f || ((it) => li(it))).join("")}</ul></div>` : "");
-  const nada = !deHoje.length && !atras.length && !urg.length && !novos.length;
+  const nivers = aniversarios().filter((a) => a.dias <= 7);
+  const nada = !deHoje.length && !atras.length && !urg.length && !novos.length && !nivers.length;
   $layer.innerHTML = `
   <div class="overlay" data-av="fundo">
     <section class="aviso sticker" role="dialog" aria-modal="true" aria-labelledby="h-av">
       <div class="aviso-oc bj" aria-hidden="true"></div>
       <div class="aviso-body">
         <h2 id="h-av">${saudacao()}, ${NOME[meu]}!</h2>
+        ${sec("Aniversários", nivers, (a) => `<li><i class="dot niver ${CLS[a.it.autor]}"></i>${esc(a.it.titulo)}${a.idade ? ` (faz ${a.idade})` : ""}<small>${faltam(a.dias)}</small></li>`)}
         ${sec(`Novidades do ${NOME[dele]}`, novos, (it) => li(it, TIPO[it.tipo]))}
         ${sec("Hoje", deHoje)}
         ${sec("Atrasados", atras)}
@@ -575,7 +697,12 @@ document.addEventListener("click", (ev) => {
       else { const [y, m] = u.mes.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); u.mes = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; }
       render(); break;
     }
-    case "novo": abrirEditor(null, b.dataset.tipo ? { tipo: b.dataset.tipo, prioridade: b.dataset.tipo === "meta" ? 2 : S.ui.prio } : {}); break;
+    case "novo": {
+      const tipo = b.dataset.tipo || (u.vista === "niver" ? "aniversario" : null);
+      abrirEditor(null, tipo ? { tipo, prioridade: tipo === "meta" ? 2 : tipo === "aniversario" ? 0 : u.prio } : {});
+      break;
+    }
+    case "vista": u.vista = b.dataset.v === "niver" ? "niver" : "quadro"; salvarUi(); render(); document.querySelector(".col-main")?.scrollIntoView({ block: "start" }); break;
     case "editar": if (item) abrirEditor(item); break;
     case "feito": if (item) gravar(S.backend.salvarItem(item.id, { feito: !item.feito, atualizadoEm: Date.now() }), item.feito ? "Reaberto." : "Concluído!"); break;
     case "apagar": {
@@ -610,6 +737,8 @@ document.addEventListener("input", (ev) => {
   if (!E || !t.dataset.ed) return;
   const k = t.dataset.ed;
   if (k === "titulo" || k === "texto" || k === "data" || k === "hora") E[k] = t.value;
+  else if (k === "ano") E.ano = t.value.trim();
+  else if (k === "nd" || k === "nm") E[k] = Number(t.value);
   else if (k === "ckt") E.checklist[Number(t.dataset.i)].t = t.value;
   else if (k === "progresso") { E.progresso = Number(t.value); document.getElementById("ed-pv").textContent = t.value + "%"; }
 });
@@ -631,7 +760,7 @@ function acaoEditor(el, ev) {
   const k = el.dataset.ed;
   if (k === "fundo") { if (ev.target === el) { E = null; renderEditor(); } return; }
   if (k === "fechar") { E = null; renderEditor(); return; }
-  if (k === "tipo") { E.tipo = el.dataset.v; if (E.tipo === "evento" && !E.data) E.data = hoje(); if ((E.tipo === "checklist" || E.tipo === "meta") && !E.checklist.length) E.checklist.push({ t: "", ok: false }); renderEditor(); return; }
+  if (k === "tipo") { E.tipo = el.dataset.v; prepararNiver(); if (E.tipo !== "aniversario" && !Number(E.prioridade)) E.prioridade = S.ui.prio; if (E.tipo === "evento" && !E.data) E.data = hoje(); if ((E.tipo === "checklist" || E.tipo === "meta") && !E.checklist.length) E.checklist.push({ t: "", ok: false }); renderEditor(); return; }
   if (k === "prio") { E.prioridade = Number(el.dataset.v); renderEditor(); return; }
   if (k === "ckadd") { E.checklist.push({ t: "", ok: false }); renderEditor(); document.getElementById("ck-" + (E.checklist.length - 1))?.focus(); return; }
   if (k === "ckdel") { E.checklist.splice(Number(el.dataset.i), 1); renderEditor(); return; }
