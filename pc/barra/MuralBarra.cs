@@ -196,6 +196,16 @@ namespace Mural
         public string Tipo, Titulo, Autor, Data, DataFim, Hora, Niver;
         public int Ano;
         public int Lembrar = 7; // aniversários: quantos dias antes começa a lembrar
+        public int Lembrete;    // minutos antes do horário (0 = sem lembrete)
+        public string Id;
+    }
+
+    /// <summary>Um lembrete antes do horário: na hora, notificação do Windows + destaque piscando na barrinha.</summary>
+    class Lembrete
+    {
+        public string Chave, Titulo, Autor, Hora;
+        public DateTime Toca, Inicio;
+        public int Minutos;
     }
 
     class Compromisso
@@ -203,7 +213,7 @@ namespace Mural
         public string Quando, Titulo, Autor, Hora;
         public DateTime Dia;
         public DateTime? Alvo;   // quando acontece (para o "faltam…")
-        public bool Atrasado, Niver, Atualizacao;
+        public bool Atrasado, Niver, Atualizacao, Destaque;
         public Estacao Estacao;  // não nulo: "começa o verão" etc.
 
         /// <summary>"faltam 3 dias e 5 h", "faltam 2 h 10 min"; vazio se já passou.</summary>
@@ -301,6 +311,8 @@ namespace Mural
                     Niver = Valor(f, "niver"),
                     DataFim = Valor(f, "dataFim"),
                     Lembrar = LerInt(Valor(f, "lembrar"), 7),
+                    Lembrete = LerInt(Valor(f, "lembrete"), 0),
+                    Id = Convert.ToString(doc["name"]).Split('/').Last(),
                     Ano = ano
                 });
             }
@@ -404,6 +416,30 @@ namespace Mural
                 .ThenBy(c => c.Hora == "" ? "99" : c.Hora)
                 .Take(10)
                 .ToList();
+        }
+
+        /// <summary>Lembretes dos próximos 3 dias (e dos últimos 30 min, para não perder um que tocou com o PC desligado).</summary>
+        public static List<Lembrete> Lembretes(List<Item> itens)
+        {
+            var lista = new List<Lembrete>();
+            var agora = DateTime.Now;
+            foreach (var it in itens)
+            {
+                if (it.Lembrete <= 0 || it.Data == null || it.Hora == "" || it.Tipo == "aniversario") continue;
+                DateTime dia;
+                TimeSpan hora;
+                if (!DateTime.TryParseExact(it.Data, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dia) ||
+                    !TimeSpan.TryParse(it.Hora, CultureInfo.InvariantCulture, out hora)) continue;
+                var inicio = dia + hora;
+                var toca = inicio.AddMinutes(-it.Lembrete);
+                if (toca < agora.AddMinutes(-30) || toca > agora.AddDays(3)) continue;
+                lista.Add(new Lembrete
+                {
+                    Chave = it.Id + "|" + toca.ToString("yyyyMMddHHmm"), Titulo = it.Titulo, Autor = it.Autor,
+                    Hora = it.Hora, Inicio = inicio, Toca = toca, Minutos = it.Lembrete
+                });
+            }
+            return lista;
         }
 
         public static List<Compromisso> Exemplo()
@@ -706,6 +742,15 @@ namespace Mural
         readonly System.Windows.Forms.Timer tEncaixe = new System.Windows.Forms.Timer { Interval = 1500 };
         readonly System.Windows.Forms.Timer tDados = new System.Windows.Forms.Timer { Interval = 120000 };
         readonly System.Windows.Forms.Timer tVersao = new System.Windows.Forms.Timer { Interval = 20000 }; // 20 s, depois a cada 6 h
+        readonly System.Windows.Forms.Timer tLembrete = new System.Windows.Forms.Timer { Interval = 10000 };
+        readonly System.Windows.Forms.Timer tPiscar = new System.Windows.Forms.Timer { Interval = 500 };
+        List<Lembrete> lembretes = new List<Lembrete>();
+        // Lembretes que já tocaram: destaque na frente da rotação até a hora do compromisso.
+        readonly Dictionary<string, Lembrete> destaques = new Dictionary<string, Lembrete>();
+        HashSet<string> avisados;
+        NotifyIcon icone;
+        int piscadas;
+        bool piscaLigado;
         int versaoNova;
         string zipNovo;
         bool atualizando;
@@ -743,10 +788,17 @@ namespace Mural
             menu.Items.Add("Fechar a barra", null, (a, b) => Close());
             ContextMenuStrip = menu;
 
-            tGirar.Tick += (a, b) => { if (!pausado) Girar(1); };
+            tGirar.Tick += (a, b) => { if (!pausado && !tPiscar.Enabled) Girar(1); }; // parado no lembrete enquanto ele pisca
             tAnim.Tick += (a, b) => { anim = Math.Min(1f, anim + 0.08f); if (anim >= 1f) tAnim.Stop(); Invalidate(); };
             tEncaixe.Tick += (a, b) => { Encaixar(); if (DateTime.Today != diaVisto) { diaVisto = DateTime.Today; Atualizar(); } };
             tDados.Tick += (a, b) => Atualizar();
+            tLembrete.Tick += (a, b) => VerificarLembretes();
+            tPiscar.Tick += (a, b) =>
+            {
+                piscaLigado = !piscaLigado;
+                if (--piscadas <= 0) { piscaLigado = false; tPiscar.Stop(); }
+                Invalidate();
+            };
             MouseEnter += (a, b) => pausado = true;
             MouseLeave += (a, b) => pausado = false;
             MouseClick += (a, b) =>
@@ -777,11 +829,94 @@ namespace Mural
             tEncaixe.Start();
             tDados.Start();
             if (!demo) tVersao.Start();
+            tLembrete.Start();
             Atualizar();
+        }
+
+        // ---------- lembretes antes do horário
+
+        static string ArquivoAvisados { get { return Path.Combine(Config.Pasta, "lembretes-avisados.txt"); } }
+
+        void VerificarLembretes()
+        {
+            if (avisados == null)
+            {
+                avisados = new HashSet<string>();
+                try { foreach (var l in File.ReadAllLines(ArquivoAvisados)) avisados.Add(l); } catch { }
+            }
+            var agora = DateTime.Now;
+            var mudou = false;
+            foreach (var l in lembretes)
+            {
+                if (l.Toca > agora || agora - l.Toca > TimeSpan.FromMinutes(30) || avisados.Contains(l.Chave)) continue;
+                avisados.Add(l.Chave);
+                mudou = true;
+                destaques[l.Chave] = l;
+                Notificar(l);
+            }
+            // Tira o destaque quando o compromisso começa.
+            foreach (var k in destaques.Where(p => p.Value.Inicio <= agora).Select(p => p.Key).ToList()) { destaques.Remove(k); mudou = true; }
+            if (!mudou) return;
+            if (!demo)
+                try
+                {
+                    Directory.CreateDirectory(Config.Pasta);
+                    File.WriteAllLines(ArquivoAvisados, avisados.Skip(Math.Max(0, avisados.Count - 300)));
+                }
+                catch { }
+            IncluirDestaques();
+            atual = 0;
+            anim = 0f;
+            tAnim.Start();
+            AtualizarDica();
+            Invalidate();
+        }
+
+        static string QuandoTexto(Lembrete l)
+        {
+            var falta = l.Inicio - DateTime.Now;
+            if (falta.TotalHours >= 20) return "Amanhã às " + l.Hora;
+            if (falta.TotalMinutes >= 90) return "Daqui a " + Math.Round(falta.TotalHours) + " horas, às " + l.Hora;
+            if (falta.TotalMinutes >= 50) return "Daqui a 1 hora, às " + l.Hora;
+            return "Daqui a " + Math.Max(1, (int)Math.Ceiling(falta.TotalMinutes)) + " min, às " + l.Hora;
+        }
+
+        void Notificar(Lembrete l)
+        {
+            Registro.Escrever("lembrete: " + l.Titulo + " (" + l.Hora + ")");
+            try
+            {
+                if (icone == null)
+                {
+                    icone = new NotifyIcon { Text = "Mural", Visible = true };
+                    try { icone.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { icone.Icon = SystemIcons.Information; }
+                    icone.BalloonTipClicked += (a, b) => AbrirMural();
+                    icone.Click += (a, b) => AbrirMural();
+                }
+                icone.Visible = true;
+                icone.ShowBalloonTip(15000, l.Titulo, QuandoTexto(l) + (l.Autor == "yoshiro" ? " · anotado pelo Yoshiro" : l.Autor == "bjorn" ? " · anotado pelo Bjørn" : ""), ToolTipIcon.Info);
+            }
+            catch (Exception ex) { Registro.Escrever("não consegui mostrar a notificação: " + ex.Message); }
+            piscadas = 120; // pisca por 1 minuto
+            tPiscar.Start();
+        }
+
+        /// <summary>Põe os lembretes que já tocaram na frente da rotação, em destaque.</summary>
+        void IncluirDestaques()
+        {
+            lista.RemoveAll(c => c.Destaque);
+            var i = 0;
+            foreach (var l in destaques.Values.OrderBy(x => x.Inicio))
+                lista.Insert(i++, new Compromisso
+                {
+                    Destaque = true, Autor = l.Autor, Hora = l.Hora, Dia = l.Inicio.Date, Alvo = l.Inicio,
+                    Titulo = l.Titulo, Quando = "Lembrete · às " + l.Hora
+                });
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (icone != null) { icone.Visible = false; icone.Dispose(); }
             // Devolve o espaço da lista de janelas.
             if (embutido && Win.IsWindow(lista_janelas) && Win.IsWindow(rebar))
             {
@@ -995,14 +1130,26 @@ namespace Mural
             buscando = true;
             try
             {
-                if (demo) { await Task.Delay(300); lista = Dados.Exemplo(); aviso = null; }
+                if (demo)
+                {
+                    await Task.Delay(300);
+                    lista = Dados.Exemplo();
+                    aviso = null;
+                    // Demonstração: um lembrete que toca 15 s depois de abrir.
+                    var inicio = DateTime.Now.AddSeconds(15).AddHours(1);
+                    lembretes = new List<Lembrete> { new Lembrete { Chave = "demo|" + inicio.Ticks, Titulo = "Consulta no dentista (exemplo)", Autor = "yoshiro",
+                        Hora = inicio.ToString("HH:mm"), Inicio = inicio, Toca = inicio.AddHours(-1), Minutos = 60 } };
+                }
                 else
                 {
                     var s = sessao;
-                    var novos = await Task.Run(() => Dados.Proximos(Dados.Buscar(s)));
+                    var itens = await Task.Run(() => Dados.Buscar(s));
+                    var novos = Dados.Proximos(itens);
+                    lembretes = Dados.Lembretes(itens);
                     lista = novos;
                     aviso = novos.Count == 0 ? "Nada marcado nos próximos dias" : null;
                 }
+                IncluirDestaques();
                 IncluirAvisoDeVersao();
                 if (atual >= lista.Count) atual = 0;
             }
@@ -1166,6 +1313,11 @@ namespace Mural
             var dy = (int)((1f - Suave(anim)) * Height * 0.45f);
             var alfa = (int)(255 * Suave(anim));
 
+            // Lembrete que acabou de tocar: o fundo pisca na cor de quem anotou durante 1 minuto.
+            if (c != null && c.Destaque && piscaLigado)
+                using (var fundo = new SolidBrush(Color.FromArgb(110, c.Autor == "yoshiro" ? Verde : Roxo)))
+                    g.FillRectangle(fundo, ClientRectangle);
+
             // Rosto de quem anotou, com anel na cor da pessoa
             var azul = Color.FromArgb(77, 163, 255);
             var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : c.Autor == "yoshiro" ? Verde : Roxo;
@@ -1214,7 +1366,7 @@ namespace Mural
             var resta = c == null ? "" : c.Falta();
             if (resta != "") linha1 = c.Niver && c.Quando != "Hoje!" ? resta : linha1 + " · " + resta;
             var linha2 = c == null ? aviso ?? "" : c.Titulo;
-            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
+            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Destaque ? Color.FromArgb(255, 210, 90) : c.Estacao != null ? c.Estacao.Cor : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
             if (claro && c != null && !c.Niver && !c.Atrasado) cor1 = c.Autor == "yoshiro" ? Color.FromArgb(23, 115, 75) : Color.FromArgb(116, 16, 196);
             var area = new RectangleF(xTexto, 0, Math.Max(10, direita - xTexto), Height);
             using (var f1 = new Font("Segoe UI Semibold", 7.5f))

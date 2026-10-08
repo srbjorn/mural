@@ -176,6 +176,61 @@ function progresso(it) {
 }
 // Eventos de vários dias guardam dataFim ("até que dia"); o resto usa só data.
 const fim = (it) => (it.dataFim && it.data && it.dataFim > it.data ? it.dataFim : it.data);
+
+/* ============ Repetição ============ */
+// repetir: { tipo: diaria | semanal | mensal | anual, dias: [0-6] (semanal), dia: 1-31 (mensal), md: "MM-DD" (anual), ate: "AAAA-MM-DD" | null }
+// O item guarda sempre a data da vez atual; ao concluir, vai para a próxima e o feito entra no histórico.
+const REPETIR = [["", "Não repete"], ["diaria", "Todo dia"], ["semanal", "Toda semana"], ["mensal", "Todo mês"], ["anual", "Todo ano"]];
+const DIAS_CURTOS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const repete = (it) => !!(it.repetir && it.repetir.tipo && it.data);
+const ultimoDiaDoMes = (y, m) => new Date(y, m + 1, 0).getDate(); // m de 0 a 11
+/** Primeira vez depois do dia `depoisDe` ("AAAA-MM-DD"). Dia 31 vira o último dia do mês; 29/02 vira 28/02. */
+function proximaData(rep, depoisDe) {
+  const d = new Date(depoisDe + "T12:00:00");
+  if (rep.tipo === "diaria") { d.setDate(d.getDate() + 1); return ymd(d); }
+  if (rep.tipo === "semanal") {
+    const dias = rep.dias && rep.dias.length ? rep.dias : [d.getDay()];
+    for (let i = 1; i <= 7; i++) { const x = new Date(d); x.setDate(d.getDate() + i); if (dias.includes(x.getDay())) return ymd(x); }
+  }
+  if (rep.tipo === "mensal") {
+    let y = d.getFullYear(), m = d.getMonth();
+    const alvo = Number(rep.dia) || d.getDate();
+    for (let k = 0; k < 14; k++) {
+      const x = new Date(y, m, Math.min(alvo, ultimoDiaDoMes(y, m)), 12);
+      if (x > d) return ymd(x);
+      if (++m > 11) { m = 0; y++; }
+    }
+  }
+  if (rep.tipo === "anual") {
+    const [mm, dd] = (rep.md || depoisDe.slice(5)).split("-").map(Number);
+    for (let y = d.getFullYear(); y <= d.getFullYear() + 2; y++) {
+      const x = new Date(y, mm - 1, mm === 2 && dd === 29 && !bissexto(y) ? 28 : dd, 12);
+      if (x > d) return ymd(x);
+    }
+  }
+  return null;
+}
+/** O que gravar ao concluir (com histórico) ou pular uma vez: a próxima data depois de hoje e da data atual. */
+function avancar(it, concluir) {
+  const h = hoje();
+  const prox = proximaData(it.repetir, it.data > h ? it.data : h);
+  const o = { atualizadoEm: Date.now() };
+  if (concluir) o.historico = [...(it.historico || []), { data: it.data, feitoEm: Date.now(), por: eu() }].slice(-30);
+  if (!prox || (it.repetir.ate && prox > it.repetir.ate)) { o.feito = true; return { o, prox: null }; } // a série acabou
+  const delta = Math.round((new Date(prox + "T12:00:00") - new Date(it.data + "T12:00:00")) / 864e5);
+  o.data = prox;
+  if (it.dataFim) o.dataFim = somaDias(it.dataFim, delta);
+  if ((it.checklist || []).length) o.checklist = it.checklist.map((x) => ({ ...x, ok: false }));
+  return { o, prox };
+}
+function textoRepetir(rep) {
+  if (!rep || !rep.tipo) return "";
+  let t = rep.tipo === "diaria" ? "Todo dia" : rep.tipo === "mensal" ? `Todo mês, dia ${rep.dia}` : rep.tipo === "anual" ? `Todo ano, ${fmtNiver(rep.md)}` :
+    `Toda ${(rep.dias || []).length ? [...rep.dias].sort().map((d) => DIAS_CURTOS[d]).join(", ") : "semana"}`;
+  if (rep.ate) t += ` · até ${fmtDia(rep.ate).toLowerCase()}`;
+  return t;
+}
+const LEMBRETE = [["", "Sem lembrete"], [15, "15 min antes"], [30, "30 min antes"], [60, "1 hora antes"], [120, "2 horas antes"], [1440, "1 dia antes"]];
 const noDia = (it, dia) => !!it.data && dia >= it.data && dia <= fim(it);
 const atrasado = (it) => !it.feito && it.data && fim(it) < hoje();
 /** "Hoje · 15:30", "sex, 16 out até dom, 18 out", "Acontecendo · até dom, 18 out", "Último dia". */
@@ -245,6 +300,10 @@ function backendDemo() {
     { id: "d4", tipo: "meta", titulo: "Juntar para a viagem", texto: "", prioridade: 2, data: somaDias(h, 60), hora: "", autor: "yoshiro", criadoEm: agora - 5 * 86400e3,
       checklist: [{ t: "Reserva do hotel", ok: true }, { t: "Passagens", ok: false }, { t: "Passeios", ok: false }] },
     { id: "d5", tipo: "evento", titulo: "Aniversário de namoro", texto: "", prioridade: 3, data: somaDias(h, 6), hora: "20:00", autor: "bjorn", criadoEm: agora - 7 * 86400e3 },
+    { id: "d12", tipo: "nota", titulo: "Tirar o lixo", texto: "", prioridade: 2, data: somaDias(h, 1), hora: "20:00", lembrete: 30, autor: "yoshiro", criadoEm: agora - 40 * 86400e3,
+      repetir: { tipo: "semanal", dias: [2, 5], ate: null }, historico: [{ data: somaDias(h, -2), feitoEm: agora - 2 * 86400e3, por: "bjorn" }] },
+    { id: "d13", tipo: "nota", titulo: "Conta de internet", texto: "Débito automático não pega, pagar pelo app do banco.", prioridade: 3, data: somaDias(h, 2), hora: "", autor: "bjorn", criadoEm: agora - 90 * 86400e3,
+      repetir: { tipo: "mensal", dia: Number(somaDias(h, 2).slice(8)), ate: null }, historico: [{ data: somaDias(h, -29), feitoEm: agora - 30 * 86400e3, por: "yoshiro" }] },
     { id: "d11", tipo: "evento", titulo: "Ultimate Drift", texto: "Levar protetor e garrafa d'água.", prioridade: 2, data: somaDias(h, -1), dataFim: somaDias(h, 1), hora: "", autor: "bjorn", criadoEm: agora - 3 * 86400e3 },
     { id: "d6", tipo: "nota", titulo: "Pagar a conta de luz", texto: "Vence amanhã, boleto no email.", prioridade: 3, data: somaDias(h, -1), hora: "", autor: "yoshiro", criadoEm: agora - 600e3 },
     { id: "d7", tipo: "meta", titulo: "Treinar 3x por semana", texto: "", prioridade: 1, data: null, hora: "", autor: "bjorn", criadoEm: agora - 9 * 86400e3, progresso: 40, checklist: [] },
@@ -436,6 +495,14 @@ function calendario() {
     if (!it.data || it.feito) continue;
     // Um evento de vários dias aparece em cada dia, de data até dataFim (no máximo 60 dias).
     for (let s = it.data, n = 0; s <= fim(it) && n < 60; s = somaDias(s, 1), n++) (porDia[s] ||= []).push(it);
+    // Próximas vezes de um item que repete (pontinho vazado), até o fim do que aparece no calendário.
+    if (repete(it)) {
+      const ultimoVisivel = ymd(new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + 41));
+      for (let s = proximaData(it.repetir, it.data), n = 0; s && s <= ultimoVisivel && n < 60; s = proximaData(it.repetir, s), n++) {
+        if (it.repetir.ate && s > it.repetir.ate) break;
+        (porDia[s] ||= []).push({ ...it, _proxima: true });
+      }
+    }
   }
   const nivers = S.itens.filter(ehNiver);
   const h = hoje();
@@ -447,7 +514,7 @@ function calendario() {
     const est = inicioEstacaoEm(s);
     const cls = ["day", d.getMonth() !== m - 1 && "fora", s === h && "hoje", s === S.ui.dia && "sel", est && `estacao ${est.cls}`].filter(Boolean).join(" ");
     const dots = nv.slice(0, 2).map((it) => `<i class="dot niver ${CLS[it.autor] || ""}"></i>`).join("") +
-      lista.slice(0, 4 - Math.min(nv.length, 2)).map((it) => `<i class="dot ${CLS[it.autor] || ""} ${Number(it.prioridade) === 3 ? "p3" : ""}"></i>`).join("");
+      lista.slice(0, 4 - Math.min(nv.length, 2)).map((it) => `<i class="dot ${CLS[it.autor] || ""} ${Number(it.prioridade) === 3 ? "p3" : ""} ${it._proxima ? "rep" : ""}"></i>`).join("");
     const rot = `${d.getDate()} de ${d.toLocaleDateString("pt-BR", { month: "long" })}${est ? `, começa ${est.chave === "primavera" ? "a" : "o"} ${est.nome.toLowerCase()}` : ""}${lista.length ? `, ${lista.length} ${lista.length > 1 ? "itens" : "item"}` : ""}${nv.length ? `, aniversário de ${nv.map((x) => x.titulo).join(" e ")}` : ""}`;
     cel += `<button class="${cls}" data-act="dia" data-d="${s}" aria-label="${esc(rot)}" title="${esc(rot)}" aria-pressed="${s === S.ui.dia}">${est ? `<i class="est-marca" aria-hidden="true">${est.simbolo}</i>` : ""}<span>${d.getDate()}</span><span class="dots">${dots}</span></button>`;
   }
@@ -523,10 +590,13 @@ function cartao(it) {
     </div>
     <h3 class="item-t">${esc(it.titulo)}</h3>
     ${quando}
+    ${repete(it) || (it.lembrete && it.hora) ? `<span class="lembra">${[repete(it) ? `↻ ${textoRepetir(it.repetir)}` : "", it.lembrete && it.hora ? `Lembrete ${(LEMBRETE.find(([v]) => v === Number(it.lembrete)) || [0, `${it.lembrete} min antes`])[1]}` : ""].filter(Boolean).join(" · ")}</span>` : ""}
     ${it.texto ? `<p class="item-x">${esc(it.texto)}</p>` : ""}
     ${checks}${meta}
+    ${(it.historico || []).length ? `<details class="historico"><summary>Feito ${it.historico.length}× · última vez ${esc(fmtDia(it.historico.at(-1).data).toLowerCase())}${it.historico.at(-1).por ? ` (${NOME[it.historico.at(-1).por] || ""})` : ""}</summary><ul>${it.historico.slice(-8).reverse().map((h) => `<li>${esc(new Date(h.data + "T12:00:00").toLocaleDateString("pt-BR"))} — ${esc(NOME[h.por] || "")}, concluído em ${esc(new Date(h.feitoEm).toLocaleDateString("pt-BR"))}</li>`).join("")}</ul></details>` : ""}
     <div class="item-foot" data-foot="${esc(it.id)}">
       <button class="btn btn-small" data-act="feito" data-id="${esc(it.id)}">${it.feito ? "Reabrir" : "Concluir"}</button>
+      ${repete(it) && !it.feito ? `<button class="btn btn-small btn-ghost" data-act="pular" data-id="${esc(it.id)}">Pular esta vez</button>` : ""}
       <button class="btn btn-small btn-ghost" data-act="editar" data-id="${esc(it.id)}">Editar</button>
       <button class="btn btn-small btn-ghost btn-danger" data-act="apagar" data-id="${esc(it.id)}">Excluir</button>
     </div>
@@ -669,6 +739,11 @@ function abrirEditor(it, preset = {}) {
     ? { ...it, checklist: (it.checklist || []).map((x) => ({ ...x })), confirmar: false }
     : { id: null, tipo: "nota", titulo: "", texto: "", prioridade: S.ui.prio, data: S.ui.dia || "", hora: "", checklist: [], progresso: 0, feito: false, ...preset };
   if (E.tipo === "evento" && !E.data) E.data = hoje();
+  // Repetir e lembrete: o lembrete padrão é 1 hora antes nos eventos novos (só vale se tiver hora).
+  E.repTipo = E.repetir?.tipo || "";
+  E.repDias = [...(E.repetir?.dias || [])];
+  E.repAte = E.repetir?.ate || "";
+  E.lembrete = it ? (it.lembrete ? String(it.lembrete) : "") : E.tipo === "evento" ? "60" : "";
   prepararNiver();
   renderEditor(true);
 }
@@ -714,7 +789,14 @@ function renderEditor(focar) {
         ${E.tipo === "evento" ? `<div class="field"><label for="ed-df">Até que dia (opcional)</label><input class="input" type="date" id="ed-df" data-ed="dataFim" min="${esc(E.data || "")}" value="${esc(E.dataFim || "")}"></div>` : ""}
         <div class="field"><label for="ed-h">Hora (opcional)</label><input class="input" type="time" id="ed-h" data-ed="hora" value="${esc(E.hora || "")}"></div>
       </div>
-      ${E.tipo === "evento" ? `<p class="dica-campo">Para eventos de vários dias, como o Ultimate Drift: marque o primeiro dia e o último. Deixe "Até que dia" vazio se for um dia só.</p>` : ""}`}
+      ${E.tipo === "evento" ? `<p class="dica-campo">Para eventos de vários dias, como o Ultimate Drift: marque o primeiro dia e o último. Deixe "Até que dia" vazio se for um dia só.</p>` : ""}
+      ${E.tipo !== "meta" ? `
+      <div class="row2">
+        <div class="field"><label for="ed-rep">Repetir</label><select class="input" id="ed-rep" data-ed="repTipo">${REPETIR.map(([v, l]) => `<option value="${v}" ${E.repTipo === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="field"><label for="ed-lem">Lembrete antes${E.hora ? "" : " (precisa de hora)"}</label><select class="input" id="ed-lem" data-ed="lembrete" ${E.hora ? "" : "disabled"}>${LEMBRETE.map(([v, l]) => `<option value="${v}" ${String(E.lembrete) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      </div>
+      ${E.repTipo === "semanal" ? `<div class="field"><span class="label">Em quais dias</span><div class="seg dias">${DIAS_CURTOS.map((d, i) => `<button type="button" data-ed="repDia" data-v="${i}" aria-pressed="${E.repDias.includes(i)}">${d}</button>`).join("")}</div></div>` : ""}
+      ${E.repTipo ? `<div class="row2"><div class="field"><label for="ed-ra">Repetir até (opcional)</label><input class="input" type="date" id="ed-ra" data-ed="repAte" min="${esc(E.data || "")}" value="${esc(E.repAte)}"></div><p class="dica-campo rep">${E.repTipo === "mensal" && Number((E.data || "").slice(8)) > 28 ? "Nos meses mais curtos, cai no último dia do mês. " : ""}Ao concluir, fica guardado no histórico e volta sozinho na próxima data.</p></div>` : ""}` : ""}`}
       <div class="field"><label for="ed-x">${niver ? "Ideias de presente e anotações (opcional)" : "Detalhes (opcional)"}</label><textarea class="textarea" id="ed-x" data-ed="texto">${esc(E.texto)}</textarea></div>
       ${comLista ? `<div class="field"><span class="label">${E.tipo === "meta" ? "Etapas da meta" : "Itens da lista"}</span><div class="ck-edit">${linhas}</div>
         <button type="button" class="btn btn-small" data-ed="ckadd">+ ${E.tipo === "meta" ? "Etapa" : "Item"}</button></div>` : ""}
@@ -742,7 +824,18 @@ async function salvarEditor() {
   const ano = Number(E.ano);
   if (niver && E.ano !== "" && (ano < 1900 || ano > new Date().getFullYear())) { erro.textContent = "Ano de nascimento inválido (ou deixe em branco)."; document.getElementById("ed-ano").focus(); return; }
   const usaLista = E.tipo === "checklist" || E.tipo === "meta";
+  const comRepeticao = !niver && E.tipo !== "meta" && E.repTipo;
+  if (comRepeticao && !E.data) E.data = hoje(); // repetir precisa de uma primeira data
+  if (comRepeticao && E.repAte && E.repAte < E.data) { erro.textContent = "\"Repetir até\" não pode ser antes do primeiro dia."; document.getElementById("ed-ra").focus(); return; }
+  const diaSemana = E.data ? new Date(E.data + "T12:00:00").getDay() : 0;
+  const repetir = comRepeticao ? {
+    tipo: E.repTipo,
+    dias: E.repTipo === "semanal" ? (E.repDias.length ? [...E.repDias].sort() : [diaSemana]) : [],
+    dia: Number(E.data.slice(8)), md: E.data.slice(5), ate: E.repAte || null,
+  } : null;
   const o = {
+    repetir,
+    lembrete: !niver && E.hora && E.lembrete !== "" ? Number(E.lembrete) : null,
     tipo: E.tipo, titulo, texto: E.texto.trim(), prioridade: niver ? 0 : Number(E.prioridade) || 1,
     data: niver ? null : E.data || null, hora: niver ? "" : E.hora || "",
     dataFim: E.tipo === "evento" && E.dataFim && E.data && E.dataFim > E.data ? E.dataFim : null,
@@ -876,7 +969,20 @@ document.addEventListener("click", (ev) => {
     }
     case "vista": u.vista = b.dataset.v === "niver" ? "niver" : "quadro"; salvarUi(); render(); document.querySelector(".col-main")?.scrollIntoView({ block: "start" }); break;
     case "editar": if (item) abrirEditor(item); break;
-    case "feito": if (item) gravar(S.backend.salvarItem(item.id, { feito: !item.feito, atualizadoEm: Date.now() }), item.feito ? "Reaberto." : "Concluído!"); break;
+    case "feito": {
+      if (!item) break;
+      if (repete(item) && !item.feito) {
+        const { o, prox } = avancar(item, true);
+        gravar(S.backend.salvarItem(item.id, o), prox ? `Feito! Próxima vez: ${fmtDia(prox).toLowerCase()}.` : "Feito! Era a última vez.");
+      } else gravar(S.backend.salvarItem(item.id, { feito: !item.feito, atualizadoEm: Date.now() }), item.feito ? "Reaberto." : "Concluído!");
+      break;
+    }
+    case "pular": {
+      if (!item || !repete(item)) break;
+      const { o, prox } = avancar(item, false);
+      gravar(S.backend.salvarItem(item.id, o), prox ? `Pulado. Próxima vez: ${fmtDia(prox).toLowerCase()}.` : "Pulado. Era a última vez.");
+      break;
+    }
     case "apagar": {
       const foot = b.closest(".item-foot");
       foot.innerHTML = `<span class="confirm">Excluir de vez? <button class="btn btn-small btn-danger" data-act="apagar-sim" data-id="${esc(item.id)}">Sim, excluir</button><button class="btn btn-small btn-ghost" data-act="apagar-nao">Não</button></span>`;
@@ -909,7 +1015,10 @@ document.addEventListener("input", (ev) => {
   const t = ev.target;
   if (!E || !t.dataset.ed) return;
   const k = t.dataset.ed;
-  if (k === "titulo" || k === "texto" || k === "data" || k === "hora" || k === "dataFim") E[k] = t.value;
+  if (k === "titulo" || k === "texto" || k === "data" || k === "hora" || k === "dataFim" || k === "repAte" || k === "lembrete") E[k] = t.value;
+  if (k === "repTipo") { E.repTipo = t.value; renderEditor(); return; }
+  // O lembrete só pode ser escolhido com hora: liga/desliga o campo quando a hora muda.
+  if (k === "hora") { const l = document.getElementById("ed-lem"); if (l) { l.disabled = !t.value; l.previousElementSibling.textContent = "Lembrete antes" + (t.value ? "" : " (precisa de hora)"); } }
   if (k === "data") { const df = document.getElementById("ed-df"); if (df) df.min = t.value; }
   else if (k === "ano") E.ano = t.value.trim();
   else if (k === "nd" || k === "nm" || k === "lembrar") E[k] = Number(t.value);
@@ -936,6 +1045,11 @@ function acaoEditor(el, ev) {
   if (k === "fechar") { E = null; renderEditor(); return; }
   if (k === "tipo") { E.tipo = el.dataset.v; prepararNiver(); if (E.tipo !== "aniversario" && !Number(E.prioridade)) E.prioridade = S.ui.prio; if (E.tipo === "evento" && !E.data) E.data = hoje(); if ((E.tipo === "checklist" || E.tipo === "meta") && !E.checklist.length) E.checklist.push({ t: "", ok: false }); renderEditor(); return; }
   if (k === "prio") { E.prioridade = Number(el.dataset.v); renderEditor(); return; }
+  if (k === "repDia") {
+    const d = Number(el.dataset.v);
+    E.repDias = E.repDias.includes(d) ? E.repDias.filter((x) => x !== d) : [...E.repDias, d];
+    renderEditor(); return;
+  }
   if (k === "ckadd") { E.checklist.push({ t: "", ok: false }); renderEditor(); document.getElementById("ck-" + (E.checklist.length - 1))?.focus(); return; }
   if (k === "ckdel") { E.checklist.splice(Number(el.dataset.i), 1); renderEditor(); return; }
   if (k === "apagar") { E.confirmar = true; renderEditor(); return; }

@@ -324,6 +324,17 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .falta.linha { display: block; border: 0; padding: 0; margin-top: 2px; font-size: 14px; }
 .lembra { font-size: 14px; color: var(--ink-2); }
 
+/* Repetição */
+.dot.rep { background: transparent; box-shadow: inset 0 0 0 2px var(--ink-2); }
+.dot.rep.bj { box-shadow: inset 0 0 0 2px var(--bj); }
+.dot.rep.yo { box-shadow: inset 0 0 0 2px var(--yo); }
+.seg.dias { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.seg.dias button { padding: 4px 0; text-transform: capitalize; }
+.dica-campo.rep { margin: 0; align-self: end; }
+.historico { font-size: 15px; color: var(--ink-2); }
+.historico summary { cursor: pointer; font-weight: 700; }
+.historico ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+
 /* Estações (hemisfério sul) */
 .pill.estacao b { font-size: 15px; line-height: 1; }
 .estacao.primavera { --est: var(--est-primavera); }

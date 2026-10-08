@@ -40,6 +40,7 @@ data class Item(
     val ano: Int? = null,
     val dataFim: String? = null, // "até que dia", em eventos de vários dias
     val lembrar: Int = 7, // aniversários: quantos dias antes começa a lembrar (todo dia até chegar)
+    val lembrete: Int? = null, // minutos antes do horário para o alarme (só quando tem hora)
 ) {
     /** Último dia (igual a data quando o evento é de um dia só). */
     val fim get() = if (data != null && dataFim != null && dataFim > data) dataFim else data
@@ -87,6 +88,7 @@ data class Item(
                 ano = d.getLong("ano")?.toInt(),
                 dataFim = d.getString("dataFim")?.takeIf { it.isNotBlank() },
                 lembrar = (d.getLong("lembrar") ?: 7L).toInt(),
+                lembrete = d.getLong("lembrete")?.toInt()?.takeIf { it > 0 },
             )
         }
 
@@ -168,6 +170,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
             val eu = db.collection("pessoas").document(user.uid).get().await().getString("quem")
             val resumo = Resumo.montar(itens)
             WidgetDados.salvar(ctx, resumo)
+            Lembretes.agendar(ctx, itens)
             Avisos.novidades(ctx, itens, eu)
             if (inputData.getBoolean("resumoDoDia", false)) Avisos.resumoDoDia(ctx, resumo)
             Atualizacao.verificar(ctx)
@@ -215,6 +218,11 @@ object Sync {
 /** Ao ligar o celular: atualiza o widget e mostra o resumo do dia. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            // App atualizado: reagenda a sincronização e os alarmes, sem o resumo do dia.
+            Sync.agendar(ctx)
+            Sync.agora(ctx)
+        }
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             Sync.agendar(ctx)
             Sync.agora(ctx, resumoDoDia = true)
