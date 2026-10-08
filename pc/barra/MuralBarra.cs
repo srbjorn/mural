@@ -478,6 +478,87 @@ namespace Mural
         public const int WS_CLIPSIBLINGS = 0x04000000;
     }
 
+    // ------------------------------------------------------------------ janela do mural (uma só)
+
+    /// <summary>
+    /// Abre o mural numa janela própria do Chrome/Edge (--app). Se já tem uma aberta, só traz ela para a frente,
+    /// e fecha as repetidas. Os atalhos do mural (Área de Trabalho, Iniciar, aviso ao ligar) passam por aqui.
+    /// </summary>
+    static class JanelaMural
+    {
+        const string Titulo = "Mural Bjørn & Yoshiro";
+        delegate bool EnumProc(IntPtr h, IntPtr p);
+        [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc proc, IntPtr p);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+        [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+        [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+        [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+        const int SW_RESTORE = 9;
+        const uint WM_CLOSE = 0x10;
+
+        /// <summary>Janelas visíveis do mural (janela de app ou aba ativa do navegador com o mural).</summary>
+        public static List<IntPtr> Abertas()
+        {
+            var lista = new List<IntPtr>();
+            EnumWindows((h, p) =>
+            {
+                if (!IsWindowVisible(h)) return true;
+                var sb = new StringBuilder(256);
+                GetWindowText(h, sb, 256);
+                if (sb.ToString().StartsWith(Titulo)) lista.Add(h);
+                return true;
+            }, IntPtr.Zero);
+            return lista;
+        }
+
+        /// <param name="aviso">abre já com o aviso do dia (usado quando o Windows liga)</param>
+        /// <param name="recarregar">fecha as janelas abertas e abre de novo (depois de uma atualização)</param>
+        public static void Abrir(bool aviso, bool recarregar)
+        {
+            var abertas = Abertas();
+            if (recarregar && abertas.Count > 0)
+            {
+                foreach (var h in abertas) PostMessage(h, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                for (int i = 0; i < 20 && Abertas().Count > 0; i++) Thread.Sleep(200);
+                abertas.Clear();
+            }
+            if (abertas.Count > 0)
+            {
+                var h = abertas[0];
+                if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+                BringWindowToTop(h);
+                SetForegroundWindow(h);
+                for (int i = 1; i < abertas.Count; i++) PostMessage(abertas[i], WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+            var url = Config.Site + (aviso ? "#aviso" : "");
+            var navegador = Navegador();
+            try
+            {
+                if (navegador != null) Process.Start(navegador, "--app=\"" + url + "\" --window-size=1500,950");
+                else Process.Start(url);
+            }
+            catch { }
+        }
+
+        static string Navegador()
+        {
+            var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var pf86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var candidatos = new[] {
+                Path.Combine(pf, @"Google\Chrome\Application\chrome.exe"),
+                Path.Combine(pf86, @"Google\Chrome\Application\chrome.exe"),
+                Path.Combine(local, @"Google\Chrome\Application\chrome.exe"),
+                Path.Combine(pf86, @"Microsoft\Edge\Application\msedge.exe"),
+                Path.Combine(pf, @"Microsoft\Edge\Application\msedge.exe") };
+            return candidatos.FirstOrDefault(File.Exists);
+        }
+    }
+
     // ------------------------------------------------------------------ registro de diagnóstico
 
     /// <summary>%LOCALAPPDATA%\Mural\barra.log: versão do Windows, como a barra foi encaixada e erros. Nunca grava senha nem token.</summary>
@@ -1064,8 +1145,7 @@ namespace Mural
 
         void AbrirMural()
         {
-            var atalho = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Mural.lnk");
-            try { Process.Start(File.Exists(atalho) ? atalho : Config.Site); } catch { }
+            JanelaMural.Abrir(false, false);
         }
 
         // ---------- desenho
@@ -1164,6 +1244,13 @@ namespace Mural
             using (var fechar = new EventWaitHandle(false, EventResetMode.AutoReset, "MuralBarraBjornYoshiroFechar", out criado))
             {
                 if (args.Contains("--fechar")) { fechar.Set(); return; }
+            }
+            // "--abrir": usado pelos atalhos do mural. Abre (ou traz para a frente) a janela do mural e sai.
+            if (args.Contains("--abrir"))
+            {
+                Win.SetProcessDPIAware();
+                JanelaMural.Abrir(args.Contains("--aviso"), args.Contains("--recarregar"));
+                return;
             }
             bool novo;
             using (var trava = new Mutex(true, "MuralBarraBjornYoshiro", out novo))

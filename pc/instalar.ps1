@@ -51,25 +51,39 @@ $icone = Join-Path $pasta "mural.ico"
 Copy-Item (Join-Path $PSScriptRoot "mural.ico") $icone -Force
 
 $shell = New-Object -ComObject WScript.Shell
-foreach ($a in $atalhos) {
-    $lnk = $shell.CreateShortcut($a.Caminho)
-    $lnk.TargetPath = $navegador
-    $lnk.Arguments = "--app=`"$Site$($a.Hash)`" --window-size=1500,950"
-    $lnk.IconLocation = $icone
-    $lnk.Description = "Mural Bjørn & Yoshiro"
-    $lnk.Save()
-}
 
-# Barrinha na barra de tarefas: fecha a versão antiga (se houver), copia a nova e abre.
+# Barrinha na barra de tarefas: fecha a versão antiga (se houver) e copia a nova.
 $barraOrigem = Join-Path $PSScriptRoot "MuralBarra.exe"
-if (Test-Path $barraOrigem) {
+$temBarra = Test-Path $barraOrigem
+if ($temBarra) {
     Fechar-Barra $barraOrigem
     Copy-Item $barraOrigem $barra -Force
     $lnk = $shell.CreateShortcut($atalhoBarra)
     $lnk.TargetPath = $barra
     $lnk.Description = "Compromissos do Mural na barra de tarefas"
     $lnk.Save()
+}
+
+# Atalhos do mural. Com a barrinha, eles passam por ela ("--abrir"): se o mural já está aberto,
+# só traz a janela para a frente em vez de abrir outra.
+foreach ($a in $atalhos) {
+    $lnk = $shell.CreateShortcut($a.Caminho)
+    if ($temBarra) {
+        $lnk.TargetPath = $barra
+        $lnk.Arguments = if ($a.Hash) { "--abrir --aviso" } else { "--abrir" }
+    } else {
+        $lnk.TargetPath = $navegador
+        $lnk.Arguments = "--app=`"$Site$($a.Hash)`" --window-size=1500,950"
+    }
+    $lnk.IconLocation = $icone
+    $lnk.Description = "Mural Bjørn & Yoshiro"
+    $lnk.Save()
+}
+
+if ($temBarra) {
     Start-Process $barra
+    # Fecha as janelas do mural que estavam abertas e abre uma nova, já com a versão mais nova.
+    Start-Process $barra -ArgumentList "--abrir --recarregar"
 }
 
 Write-Host "Pronto! O Mural abre sozinho quando o Windows iniciar."

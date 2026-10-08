@@ -299,6 +299,18 @@ function erroDados(e) {
 }
 function avisarNativo() { try { ponte?.atualizarWidget(); } catch {} }
 
+/* ============ Uma janela só ============ */
+// No PC, se o mural for aberto de novo (atalho, barrinha, atualização), a janela nova fica e as antigas se fecham.
+// window.close() só funciona em janelas de app (--app) ou abertas por script; numa aba comum do navegador nada acontece.
+if (!ponte && "BroadcastChannel" in window) {
+  try {
+    const idJanela = Math.random().toString(36).slice(2);
+    const canal = new BroadcastChannel("mural-janela");
+    canal.onmessage = (e) => { if (e.data?.tipo === "nova" && e.data.id !== idJanela) window.close(); };
+    canal.postMessage({ tipo: "nova", id: idJanela });
+  } catch {}
+}
+
 /* ============ Versões novas ============ */
 // versao.json é publicado junto com o site: { site, app, pc, apk, pcZip }.
 const V = { carregada: null, atual: null };
