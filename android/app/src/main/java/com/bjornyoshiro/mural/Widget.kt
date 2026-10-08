@@ -183,6 +183,8 @@ private fun Linha(it: Item, abrir: Action) {
         dias != null -> when (dias) { 0L -> "Hoje!"; 1L -> "Amanhã"; else -> "Em $dias dias" }
         it.data == null -> ""
         it.atrasado -> "Atrasado"
+        it.variosDias && it.noDia(h) -> if (it.fim == h) "Último dia" else "Até " +
+            LocalDate.parse(it.fim).format(DateTimeFormatter.ofPattern("EEE", Locale("pt", "BR"))).replace(".", "")
         it.data == h -> if (it.hora.isNotEmpty()) it.hora else "Hoje"
         it.data == LocalDate.now().plusDays(1).toString() -> "Amanhã"
         else -> LocalDate.parse(it.data).format(DateTimeFormatter.ofPattern("d MMM", Locale("pt", "BR"))).replace(".", "")

@@ -183,7 +183,7 @@ namespace Mural
 
     class Item
     {
-        public string Tipo, Titulo, Autor, Data, Hora, Niver;
+        public string Tipo, Titulo, Autor, Data, DataFim, Hora, Niver;
         public int Ano;
     }
 
@@ -228,6 +228,7 @@ namespace Mural
                     Data = Valor(f, "data"),
                     Hora = Valor(f, "hora") ?? "",
                     Niver = Valor(f, "niver"),
+                    DataFim = Valor(f, "dataFim"),
                     Ano = ano
                 });
             }
@@ -286,14 +287,21 @@ namespace Mural
                 if (it.Data == null || !DateTime.TryParseExact(it.Data, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                         DateTimeStyles.None, out dia)) continue;
                 if (dia > hoje.AddDays(14)) continue;
-                var atrasado = dia < hoje;
+                // Eventos de vários dias: "até que dia" (dataFim).
+                DateTime fim;
+                if (it.DataFim == null || !DateTime.TryParseExact(it.DataFim, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out fim) || fim < dia) fim = dia;
+                var atrasado = fim < hoje;
+                var acontecendo = fim > dia && dia <= hoje && hoje <= fim;
                 string quando;
                 if (atrasado) quando = "Atrasado";
+                else if (acontecendo) quando = fim == hoje ? "Hoje · último dia" : "Acontecendo · até " + fim.ToString("ddd", Config.PtBr).Replace(".", "");
                 else if (dia == hoje) quando = "Hoje";
                 else if (dia == hoje.AddDays(1)) quando = "Amanhã";
                 else quando = dia.ToString("ddd, d MMM", Config.PtBr).Replace(".", "");
-                if (!atrasado && it.Hora != "") quando += " · " + it.Hora;
-                lista.Add(new Compromisso { Dia = dia, Atrasado = atrasado, Autor = it.Autor, Hora = it.Hora, Titulo = it.Titulo, Quando = quando });
+                if (fim > dia && !atrasado && !acontecendo) quando += " a " + fim.ToString("ddd", Config.PtBr).Replace(".", "");
+                if (!atrasado && !acontecendo && it.Hora != "") quando += " · " + it.Hora;
+                lista.Add(new Compromisso { Dia = acontecendo ? hoje : dia, Atrasado = atrasado, Autor = it.Autor, Hora = it.Hora, Titulo = it.Titulo, Quando = quando });
             }
             return lista
                 .OrderBy(c => c.Atrasado ? 0 : 1)

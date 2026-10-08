@@ -91,7 +91,17 @@ function progresso(it) {
   if (c.length) return Math.round((c.filter((x) => x.ok).length / c.length) * 100);
   return Math.max(0, Math.min(100, Number(it.progresso) || 0));
 }
-const atrasado = (it) => !it.feito && it.data && it.data < hoje();
+// Eventos de vários dias guardam dataFim ("até que dia"); o resto usa só data.
+const fim = (it) => (it.dataFim && it.data && it.dataFim > it.data ? it.dataFim : it.data);
+const noDia = (it, dia) => !!it.data && dia >= it.data && dia <= fim(it);
+const atrasado = (it) => !it.feito && it.data && fim(it) < hoje();
+/** "Hoje · 15:30", "sex, 16 out até dom, 18 out", "Acontecendo · até dom, 18 out", "Último dia". */
+function fmtQuando(it) {
+  const h = hoje(), hora = it.hora ? ` · ${esc(it.hora)}` : "";
+  if (fim(it) === it.data) return fmtDia(it.data) + hora;
+  if (noDia(it, h)) return fim(it) === h ? "Último dia" + hora : `Acontecendo · até ${fmtDia(fim(it)).toLowerCase()}`;
+  return `${fmtDia(it.data)} até ${fmtDia(fim(it)).toLowerCase()}${hora}`;
+}
 const ehNovo = (it) => it.autor && it.autor !== eu() && (it.criadoEm || 0) > vistoEm();
 const pendentes = () => S.itens.filter((i) => !i.feito && i.tipo !== "aniversario");
 function ordenar(a, b) {
@@ -104,7 +114,7 @@ function ordenar(a, b) {
 function resumo() {
   const h = hoje(), p = pendentes();
   return {
-    hoje: p.filter((i) => i.data === h).length,
+    hoje: p.filter((i) => noDia(i, h)).length,
     urgentes: p.filter((i) => Number(i.prioridade) === 3).length,
     atrasados: p.filter(atrasado).length,
     novos: S.itens.filter(ehNovo).length,
@@ -152,6 +162,7 @@ function backendDemo() {
     { id: "d4", tipo: "meta", titulo: "Juntar para a viagem", texto: "", prioridade: 2, data: somaDias(h, 60), hora: "", autor: "yoshiro", criadoEm: agora - 5 * 86400e3,
       checklist: [{ t: "Reserva do hotel", ok: true }, { t: "Passagens", ok: false }, { t: "Passeios", ok: false }] },
     { id: "d5", tipo: "evento", titulo: "Aniversário de namoro", texto: "", prioridade: 3, data: somaDias(h, 6), hora: "20:00", autor: "bjorn", criadoEm: agora - 7 * 86400e3 },
+    { id: "d11", tipo: "evento", titulo: "Ultimate Drift", texto: "Levar protetor e garrafa d'água.", prioridade: 2, data: somaDias(h, -1), dataFim: somaDias(h, 1), hora: "", autor: "bjorn", criadoEm: agora - 3 * 86400e3 },
     { id: "d6", tipo: "nota", titulo: "Pagar a conta de luz", texto: "Vence amanhã, boleto no email.", prioridade: 3, data: somaDias(h, -1), hora: "", autor: "yoshiro", criadoEm: agora - 600e3 },
     { id: "d7", tipo: "meta", titulo: "Treinar 3x por semana", texto: "", prioridade: 1, data: null, hora: "", autor: "bjorn", criadoEm: agora - 9 * 86400e3, progresso: 40, checklist: [] },
     { id: "d8", tipo: "aniversario", titulo: "Lucas", texto: "Gosta de jogo de tabuleiro.", prioridade: 0, data: null, hora: "", niver: h.slice(5), ano: 1996, autor: "yoshiro", criadoEm: agora - 20 * 86400e3 },
@@ -288,7 +299,11 @@ function calendario() {
   const inicio = new Date(primeiro); inicio.setDate(1 - primeiro.getDay());
   const nomeMes = primeiro.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const porDia = {};
-  for (const it of S.itens) if (it.data && !it.feito) (porDia[it.data] ||= []).push(it);
+  for (const it of S.itens) {
+    if (!it.data || it.feito) continue;
+    // Um evento de vários dias aparece em cada dia, de data até dataFim (no máximo 60 dias).
+    for (let s = it.data, n = 0; s <= fim(it) && n < 60; s = somaDias(s, 1), n++) (porDia[s] ||= []).push(it);
+  }
   const nivers = S.itens.filter(ehNiver);
   const h = hoje();
   let cel = ["D", "S", "T", "Q", "Q", "S", "S"].map((w) => `<div class="wd" aria-hidden="true">${w}</div>`).join("");
@@ -318,12 +333,14 @@ function calendario() {
 
 function proximosEventos() {
   const h = hoje();
-  const ev = S.itens.filter((i) => i.tipo === "evento" && !i.feito && i.data && i.data >= h).sort(ordenar).slice(0, 8);
+  const ev = S.itens.filter((i) => i.tipo === "evento" && !i.feito && i.data && fim(i) >= h).sort(ordenar).slice(0, 8);
   const lis = ev.map((it) => {
     const d = new Date(it.data + "T12:00:00");
+    const f = new Date(fim(it) + "T12:00:00");
+    const dias = fim(it) !== it.data ? (d.getMonth() === f.getMonth() ? `${d.getDate()}–${f.getDate()}` : `${d.getDate()}`) : `${d.getDate()}`;
     return `<li><button class="ev" data-act="editar" data-id="${esc(it.id)}">
-      <span class="ev-date"><b>${d.getDate()}</b><span>${limpa(d.toLocaleDateString("pt-BR", { month: "short" }))}</span></span>
-      <span><span class="ev-t">${esc(it.titulo)}</span><span class="ev-s"><i class="dot ${CLS[it.autor]}"></i>${fmtDia(it.data)}${it.hora ? ` · ${esc(it.hora)}` : ""}</span></span>
+      <span class="ev-date"><b>${dias}</b><span>${limpa(d.toLocaleDateString("pt-BR", { month: "short" }))}</span></span>
+      <span><span class="ev-t">${esc(it.titulo)}</span><span class="ev-s"><i class="dot ${CLS[it.autor]}"></i>${fmtQuando(it)}</span></span>
     </button></li>`;
   }).join("");
   return `
@@ -339,7 +356,7 @@ function filtrados() {
     Number(it.prioridade) === u.prio &&
     (u.tipo === "tudo" || it.tipo === u.tipo) &&
     (u.autor === "todos" || it.autor === u.autor) &&
-    (!u.dia || it.data === u.dia) &&
+    (!u.dia || noDia(it, u.dia)) &&
     (u.concluidos || !it.feito)
   ).sort(ordenar);
 }
@@ -355,7 +372,7 @@ function cartao(it) {
     <div class="prog"><div class="prog-l"><span>Progresso</span><span>${p}%</span></div><div class="bar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><i class="${c}" style="width:${p}%"></i></div></div>
     ${(it.checklist || []).length ? `<ul class="checks">${it.checklist.map((x, i) => `<li><label class="check ${x.ok ? "ok" : ""}"><input type="checkbox" data-act="ck" data-id="${esc(it.id)}" data-i="${i}" ${x.ok ? "checked" : ""}><span>${esc(x.t)}</span></label></li>`).join("")}</ul>` : ""}` : "";
   const badge = atrasado(it) ? `<span class="badge atraso">Atrasado</span>` : ehNovo(it) ? `<span class="badge novo ${c}">Novo</span>` : "";
-  const quando = it.data ? `<span class="when">${it.tipo === "meta" ? "Prazo: " : ""}${fmtDia(it.data)}${it.hora ? ` · ${esc(it.hora)}` : ""}</span>` : "";
+  const quando = it.data ? `<span class="when">${it.tipo === "meta" ? "Prazo: " : ""}${fmtQuando(it)}</span>` : "";
   const contagem = (it.checklist || []).length && it.tipo === "checklist" ? ` · ${it.checklist.filter((x) => x.ok).length}/${it.checklist.length}` : "";
   return `
   <article class="item sticker ${c} ${it.feito ? "feito" : ""}" data-card="${esc(it.id)}">
@@ -545,10 +562,12 @@ function renderEditor(focar) {
         <div class="field"><label for="ed-ano">Ano em que nasceu (opcional)</label><input class="input" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}" id="ed-ano" data-ed="ano" value="${esc(E.ano || "")}" placeholder="Ex.: 1996"></div>
       </div>` : `
       <div class="field"><span class="label">Importância</span><div class="seg prio">${prio}</div></div>
-      <div class="row2">
-        <div class="field"><label for="ed-d">${E.tipo === "meta" ? "Prazo" : "Dia"}${E.tipo === "evento" ? "" : " (opcional)"}</label><input class="input" type="date" id="ed-d" data-ed="data" value="${esc(E.data || "")}"></div>
+      <div class="${E.tipo === "evento" ? "row3 ev3" : "row2"}">
+        <div class="field"><label for="ed-d">${E.tipo === "meta" ? "Prazo" : E.tipo === "evento" ? "Começa no dia" : "Dia (opcional)"}</label><input class="input" type="date" id="ed-d" data-ed="data" value="${esc(E.data || "")}"></div>
+        ${E.tipo === "evento" ? `<div class="field"><label for="ed-df">Até que dia (opcional)</label><input class="input" type="date" id="ed-df" data-ed="dataFim" min="${esc(E.data || "")}" value="${esc(E.dataFim || "")}"></div>` : ""}
         <div class="field"><label for="ed-h">Hora (opcional)</label><input class="input" type="time" id="ed-h" data-ed="hora" value="${esc(E.hora || "")}"></div>
-      </div>`}
+      </div>
+      ${E.tipo === "evento" ? `<p class="dica-campo">Para eventos de vários dias, como o Ultimate Drift: marque o primeiro dia e o último. Deixe "Até que dia" vazio se for um dia só.</p>` : ""}`}
       <div class="field"><label for="ed-x">${niver ? "Ideias de presente e anotações (opcional)" : "Detalhes (opcional)"}</label><textarea class="textarea" id="ed-x" data-ed="texto">${esc(E.texto)}</textarea></div>
       ${comLista ? `<div class="field"><span class="label">${E.tipo === "meta" ? "Etapas da meta" : "Itens da lista"}</span><div class="ck-edit">${linhas}</div>
         <button type="button" class="btn btn-small" data-ed="ckadd">+ ${E.tipo === "meta" ? "Etapa" : "Item"}</button></div>` : ""}
@@ -571,6 +590,7 @@ async function salvarEditor() {
   const niver = E.tipo === "aniversario";
   if (!titulo) { erro.textContent = niver ? "Escreva o nome de quem faz aniversário." : "Escreva um título."; document.getElementById("ed-t").focus(); return; }
   if (E.tipo === "evento" && !E.data) { erro.textContent = "Evento precisa de um dia."; document.getElementById("ed-d").focus(); return; }
+  if (E.tipo === "evento" && E.dataFim && E.dataFim < E.data) { erro.textContent = "O último dia não pode ser antes do primeiro."; document.getElementById("ed-df").focus(); return; }
   if (niver && E.nd > new Date(2024, E.nm, 0).getDate()) { erro.textContent = `${MESES[E.nm - 1]} não tem dia ${E.nd}.`; document.getElementById("ed-nd").focus(); return; }
   const ano = Number(E.ano);
   if (niver && E.ano !== "" && (ano < 1900 || ano > new Date().getFullYear())) { erro.textContent = "Ano de nascimento inválido (ou deixe em branco)."; document.getElementById("ed-ano").focus(); return; }
@@ -578,6 +598,7 @@ async function salvarEditor() {
   const o = {
     tipo: E.tipo, titulo, texto: E.texto.trim(), prioridade: niver ? 0 : Number(E.prioridade) || 1,
     data: niver ? null : E.data || null, hora: niver ? "" : E.hora || "",
+    dataFim: E.tipo === "evento" && E.dataFim && E.data && E.dataFim > E.data ? E.dataFim : null,
     niver: niver ? `${pad(E.nm)}-${pad(E.nd)}` : null, ano: niver && E.ano !== "" ? ano : null,
     checklist: usaLista ? E.checklist.filter((x) => x.t.trim()).map((x) => ({ t: x.t.trim(), ok: !!x.ok })) : [],
     progresso: E.tipo === "meta" ? Number(E.progresso) || 0 : 0,
@@ -597,11 +618,11 @@ function gravar(promessa, ok) {
 /* ============ Aviso do dia ============ */
 function abrirAviso() {
   const h = hoje(), meu = eu(), dele = outro(meu), p = pendentes();
-  const deHoje = p.filter((i) => i.data === h).sort(ordenar);
+  const deHoje = p.filter((i) => noDia(i, h)).sort(ordenar);
   const atras = p.filter(atrasado).sort(ordenar);
-  const urg = p.filter((i) => Number(i.prioridade) === 3 && i.data !== h && !atrasado(i)).sort(ordenar).slice(0, 6);
+  const urg = p.filter((i) => Number(i.prioridade) === 3 && !noDia(i, h) && !atrasado(i)).sort(ordenar).slice(0, 6);
   const novos = S.itens.filter(ehNovo).sort((a, b) => b.criadoEm - a.criadoEm).slice(0, 6);
-  const li = (it, extra) => `<li><i class="dot ${CLS[it.autor]}"></i>${esc(it.titulo)}<small>${extra ?? (it.hora || fmtDia(it.data) || TIPO[it.tipo])}</small></li>`;
+  const li = (it, extra) => `<li><i class="dot ${CLS[it.autor]}"></i>${esc(it.titulo)}<small>${extra ?? (it.data && fim(it) !== it.data ? fmtQuando(it) : it.hora || fmtDia(it.data) || TIPO[it.tipo])}</small></li>`;
   const sec = (t, arr, f) => (arr.length ? `<div class="aviso-sec"><h3>${t}</h3><ul>${arr.map(f || ((it) => li(it))).join("")}</ul></div>` : "");
   const nivers = aniversarios().filter((a) => a.dias <= 7);
   const nada = !deHoje.length && !atras.length && !urg.length && !novos.length && !nivers.length;
@@ -736,7 +757,8 @@ document.addEventListener("input", (ev) => {
   const t = ev.target;
   if (!E || !t.dataset.ed) return;
   const k = t.dataset.ed;
-  if (k === "titulo" || k === "texto" || k === "data" || k === "hora") E[k] = t.value;
+  if (k === "titulo" || k === "texto" || k === "data" || k === "hora" || k === "dataFim") E[k] = t.value;
+  if (k === "data") { const df = document.getElementById("ed-df"); if (df) df.min = t.value; }
   else if (k === "ano") E.ano = t.value.trim();
   else if (k === "nd" || k === "nm") E[k] = Number(t.value);
   else if (k === "ckt") E.checklist[Number(t.dataset.i)].t = t.value;

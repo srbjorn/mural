@@ -38,8 +38,13 @@ data class Item(
     val total: Int,
     val niver: String? = null, // "MM-DD", só em aniversários
     val ano: Int? = null,
+    val dataFim: String? = null, // "até que dia", em eventos de vários dias
 ) {
-    val atrasado get() = data != null && data < LocalDate.now().toString()
+    /** Último dia (igual a data quando o evento é de um dia só). */
+    val fim get() = if (data != null && dataFim != null && dataFim > data) dataFim else data
+    val atrasado get() = fim != null && fim!! < LocalDate.now().toString()
+    fun noDia(dia: String) = data != null && dia >= data && dia <= fim!!
+    val variosDias get() = fim != data
     val ehNiver get() = tipo == "aniversario" && niver != null && Regex("""\d\d-\d\d""").matches(niver)
 
     /** Próxima data do aniversário (29/02 vira 28/02 em ano não bissexto). */
@@ -60,7 +65,7 @@ data class Item(
         .put("id", id).put("tipo", tipo).put("titulo", titulo).put("prioridade", prioridade)
         .put("data", data ?: "").put("hora", hora).put("autor", autor)
         .put("criadoEm", criadoEm).put("feitos", feitos).put("total", total)
-        .put("niver", niver ?: "").put("ano", ano ?: 0)
+        .put("niver", niver ?: "").put("ano", ano ?: 0).put("dataFim", dataFim ?: "")
 
     companion object {
         fun de(d: DocumentSnapshot): Item {
@@ -79,6 +84,7 @@ data class Item(
                 total = lista.size,
                 niver = d.getString("niver")?.takeIf { it.isNotBlank() },
                 ano = d.getLong("ano")?.toInt(),
+                dataFim = d.getString("dataFim")?.takeIf { it.isNotBlank() },
             )
         }
 
@@ -87,6 +93,7 @@ data class Item(
             o.getString("data").ifBlank { null }, o.getString("hora"), o.getString("autor"),
             o.getLong("criadoEm"), o.getInt("feitos"), o.getInt("total"),
             o.optString("niver").ifBlank { null }, o.optInt("ano").takeIf { it > 0 },
+            o.optString("dataFim").ifBlank { null },
         )
     }
 }
@@ -108,7 +115,7 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
             val pendentes = todos.filter { it.tipo != "aniversario" }
             val ordem = nivers + pendentes.sortedWith(
                 compareBy<Item>(
-                    { if (it.atrasado || it.data == h) 0 else 1 },
+                    { if (it.atrasado || it.noDia(h)) 0 else 1 },
                     { -it.prioridade },
                     { it.data ?: "9999" },
                     { it.hora },
@@ -116,7 +123,7 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
             )
             return Resumo(
                 logado = true,
-                hoje = pendentes.count { it.data == h },
+                hoje = pendentes.count { it.noDia(h) },
                 urgentes = pendentes.count { it.prioridade == 3 },
                 atrasados = pendentes.count { it.atrasado },
                 itens = ordem.take(20),

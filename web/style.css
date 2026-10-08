@@ -306,6 +306,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .mes-h { font-family: var(--f-display); font-weight: 400; font-size: 20px; color: var(--festa); padding-top: 4px; border-top: 2px dashed var(--soft-line); }
 .mes-grupo:first-of-type .mes-h { border-top: 0; }
 .row3 { display: grid; grid-template-columns: 0.8fr 1.4fr 1.4fr; gap: 12px; }
+.row3.ev3 { grid-template-columns: 1fr 1fr 0.8fr; }
+.dica-campo { margin: -6px 0 0; font-size: 15px; color: var(--ink-2); }
 
 .meta-list { display: grid; gap: 14px; }
 .meta { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--sunk); border: 0; text-align: left; width: 100%; }
