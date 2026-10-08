@@ -332,10 +332,91 @@ namespace Mural
         [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
         [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
         [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr h);
+        [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr depois, int x, int y, int w, int a, uint flags);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder sb, int max);
+        public delegate bool EnumProc(IntPtr h, IntPtr p);
+        [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr pai, EnumProc proc, IntPtr p);
+        public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
+
+        /// <summary>Classes das janelas filhas diretas (para o registro de diagnóstico).</summary>
+        public static string Filhas(IntPtr pai)
+        {
+            var nomes = new List<string>();
+            EnumChildWindows(pai, (h, p) =>
+            {
+                if (GetParent(h) == pai)
+                {
+                    var sb = new StringBuilder(256);
+                    GetClassName(h, sb, 256);
+                    RECT r;
+                    GetWindowRect(h, out r);
+                    nomes.Add(sb + " [" + r.Left + "," + r.Top + " " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) + "]");
+                }
+                return true;
+            }, IntPtr.Zero);
+            return string.Join("; ", nomes);
+        }
         public const int GWL_STYLE = -16;
         public const int WS_CHILD = 0x40000000;
         public const int WS_POPUP = unchecked((int)0x80000000);
         public const int WS_CLIPSIBLINGS = 0x04000000;
+    }
+
+    // ------------------------------------------------------------------ registro de diagnóstico
+
+    /// <summary>%LOCALAPPDATA%\Mural\barra.log: versão do Windows, como a barra foi encaixada e erros. Nunca grava senha nem token.</summary>
+    static class Registro
+    {
+        static readonly string Arquivo = Path.Combine(Config.Pasta, "barra.log");
+        static string ultimoModo;
+        public static readonly int Build = LerBuild();
+        public static bool ForcarWin11; // "--win11": testa o encaixe do Windows 11 num Windows 10
+        public static bool Windows11 { get { return ForcarWin11 || Build >= 22000; } }
+
+        static int LerBuild()
+        {
+            try { return int.Parse(Convert.ToString(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber", "0"))); }
+            catch { return 0; }
+        }
+
+        public static void Escrever(string linha)
+        {
+            try
+            {
+                Directory.CreateDirectory(Config.Pasta);
+                var info = new FileInfo(Arquivo);
+                if (info.Exists && info.Length > 200000) info.Delete();
+                File.AppendAllText(Arquivo, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + linha + Environment.NewLine, Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        /// <summary>Anota o jeito de encaixar só quando muda (o encaixe roda a cada 1,5 s).</summary>
+        public static void Modo(string modo)
+        {
+            if (modo == ultimoModo) return;
+            ultimoModo = modo;
+            Escrever("modo: " + modo);
+        }
+
+        public static void Inicio(float escala)
+        {
+            Escrever("----- MuralBarra aberto. Windows build " + Build + (Windows11 ? " (Windows 11)" : " (Windows 10)") +
+                     ", escala " + escala.ToString("0.00", CultureInfo.InvariantCulture));
+            var bandeja = Win.FindWindow("Shell_TrayWnd", null);
+            Win.RECT r;
+            if (bandeja != IntPtr.Zero && Win.GetWindowRect(bandeja, out r))
+            {
+                Escrever("barra de tarefas: [" + r.Left + "," + r.Top + " " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) + "]");
+                Escrever("partes da barra: " + Win.Filhas(bandeja));
+            }
+            else Escrever("barra de tarefas (Shell_TrayWnd) não encontrada");
+        }
+
+        public static void Abrir()
+        {
+            try { Process.Start("notepad.exe", "\"" + Arquivo + "\""); } catch { }
+        }
     }
 
     // ------------------------------------------------------------------ janela de login
@@ -444,6 +525,7 @@ namespace Mural
             menu.Items.Add("Atualizar agora", null, (a, b) => Atualizar());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Sair da conta", null, (a, b) => SairDaConta());
+            menu.Items.Add("Abrir o registro (diagnóstico)", null, (a, b) => Registro.Abrir());
             menu.Items.Add("Fechar a barra", null, (a, b) => Close());
             ContextMenuStrip = menu;
 
@@ -468,6 +550,7 @@ namespace Mural
         {
             base.OnLoad(e);
             using (var g = CreateGraphics()) esc = g.DpiX / 96f;
+            Registro.Inicio(esc);
             Encaixar();
             var pedido = new EventWaitHandle(false, EventResetMode.AutoReset, "MuralBarraBjornYoshiroFechar");
             ThreadPool.RegisterWaitForSingleObject(pedido, (st, t) => { try { BeginInvoke((Action)Close); } catch { } }, null, -1, true);
@@ -502,17 +585,19 @@ namespace Mural
                 return;
             }
             bandeja = Win.FindWindow("Shell_TrayWnd", null);
-            rebar = bandeja == IntPtr.Zero ? IntPtr.Zero : Win.FindWindowEx(bandeja, IntPtr.Zero, "ReBarWindow32", null);
-            lista_janelas = rebar == IntPtr.Zero ? IntPtr.Zero : Win.FindWindowEx(rebar, IntPtr.Zero, "MSTaskSwWClass", null);
             Win.RECT tr;
-            if (lista_janelas == IntPtr.Zero || !Win.GetWindowRect(bandeja, out tr) || (tr.Right - tr.Left) < (tr.Bottom - tr.Top))
+            if (bandeja == IntPtr.Zero || !Win.GetWindowRect(bandeja, out tr) || (tr.Right - tr.Left) < (tr.Bottom - tr.Top))
             {
+                Registro.Modo("flutuando (barra de tarefas não encontrada ou na vertical)");
                 Flutuar();
                 return;
             }
+            rebar = Win.FindWindowEx(bandeja, IntPtr.Zero, "ReBarWindow32", null);
+            lista_janelas = rebar == IntPtr.Zero ? IntPtr.Zero : Win.FindWindowEx(rebar, IntPtr.Zero, "MSTaskSwWClass", null);
             var alturaBarra = tr.Bottom - tr.Top;
             var largura = (int)(300 * esc);
             var altura = Math.Max((int)(32 * esc), alturaBarra - (int)(8 * esc));
+            var y = (alturaBarra - altura) / 2;
             if (!embutido)
             {
                 TopMost = false;
@@ -521,6 +606,26 @@ namespace Mural
                 Win.SetParent(Handle, bandeja);
                 embutido = true;
             }
+
+            if (Registro.Windows11 || lista_janelas == IntPtr.Zero)
+            {
+                // Windows 11: a barra é desenhada de outro jeito e não dá para encolher a lista de janelas.
+                // Os ícones ficam no centro, então a barrinha entra no espaço vazio à esquerda do relógio.
+                var area = Win.FindWindowEx(bandeja, IntPtr.Zero, "TrayNotifyWnd", null);
+                Win.RECT nr;
+                int fim;
+                if (area != IntPtr.Zero && Win.GetWindowRect(area, out nr) && nr.Right - nr.Left > 0 && nr.Left > tr.Left)
+                    fim = nr.Left - tr.Left;
+                else
+                    fim = (tr.Right - tr.Left) - (int)(380 * esc); // estimativa: relógio + ícones de sistema
+                var x11 = fim - largura - (int)(8 * esc);
+                Registro.Modo("Windows 11, à esquerda do relógio em x=" + x11 + (area == IntPtr.Zero ? " (área do relógio estimada)" : ""));
+                Posicionar(x11, y, largura, altura);
+                Win.SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, Win.SWP_NOMOVE | Win.SWP_NOSIZE | Win.SWP_NOACTIVATE | Win.SWP_SHOWWINDOW);
+                return;
+            }
+
+            Registro.Modo("Windows 10, dentro da barra de tarefas");
             Win.RECT rr, kr;
             Win.GetWindowRect(rebar, out rr);
             Win.GetWindowRect(lista_janelas, out kr);
@@ -529,13 +634,20 @@ namespace Mural
             var inicioLista = kr.Left - rr.Left;
             if (kr.Right - rr.Left > fimLista && fimLista > inicioLista)
                 Win.MoveWindow(lista_janelas, inicioLista, kr.Top - rr.Top, fimLista - inicioLista, kr.Bottom - kr.Top, true);
-            var x = (rr.Left - tr.Left) + (rr.Right - rr.Left) - largura;
-            var y = (alturaBarra - altura) / 2;
-            if (Left != x || Top != y || Width != largura || Height != altura)
-            {
-                Win.MoveWindow(Handle, x, y, largura, altura, true);
-                Arredondar();
-            }
+            Posicionar((rr.Left - tr.Left) + (rr.Right - rr.Left) - largura, y, largura, altura);
+        }
+
+        Rectangle posicaoAtual;
+
+        void Posicionar(int x, int y, int largura, int altura)
+        {
+            // Compara com a última posição aplicada: Left/Top do Form não acompanham uma janela filha da barra.
+            var nova = new Rectangle(x, y, largura, altura);
+            if (nova == posicaoAtual) return;
+            posicaoAtual = nova;
+            Win.MoveWindow(Handle, x, y, largura, altura, true);
+            Arredondar();
+            Registro.Escrever("posição na barra: x=" + x + " y=" + y + " " + largura + "x" + altura);
         }
 
         void Flutuar()
@@ -589,11 +701,13 @@ namespace Mural
             catch (ErroMural e)
             {
                 aviso = e.Message;
+                Registro.Escrever("ao buscar o mural: " + e.Message);
                 if (e.PrecisaLogin) { buscando = false; PedirLogin(); return; }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 aviso = "O mural não respondeu agora.";
+                Registro.Escrever("erro inesperado ao buscar: " + ex.GetType().Name + ": " + ex.Message);
             }
             buscando = false;
             AtualizarDica();
@@ -743,6 +857,7 @@ namespace Mural
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 var demo = args.Contains("--demo");
+                Registro.ForcarWin11 = args.Contains("--win11");
                 Sessao s = demo ? null : Sessao.Carregar();
                 if (!demo && s == null)
                 {
