@@ -355,6 +355,17 @@ namespace Mural
         public delegate bool EnumProc(IntPtr h, IntPtr p);
         [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr pai, EnumProc proc, IntPtr p);
         public const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
+        public const int GWL_EXSTYLE = -20, WS_EX_TOPMOST = 0x8;
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] static extern IntPtr SetWindowLongPtr64(IntPtr h, int i, IntPtr v);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] static extern int SetWindowLong32(IntPtr h, int i, int v);
+
+        /// <summary>Define a janela dona (GWL_HWNDPARENT): uma janela com dono fica sempre acima dele.</summary>
+        public static void DefinirDono(IntPtr janela, IntPtr dono)
+        {
+            if (IntPtr.Size == 8) SetWindowLongPtr64(janela, -8, dono);
+            else SetWindowLong32(janela, -8, dono.ToInt32());
+        }
 
         /// <summary>Classes das janelas filhas diretas (para o registro de diagnóstico).</summary>
         public static string Filhas(IntPtr pai)
@@ -389,6 +400,15 @@ namespace Mural
         static string ultimoModo;
         public static readonly int Build = LerBuild();
         public static bool ForcarWin11; // "--win11": testa o encaixe do Windows 11 num Windows 10
+        /// <summary>Previsão do tempo (Widgets) ligada na barra do Windows 11; o padrão é ligada.</summary>
+        public static bool WidgetsLigado
+        {
+            get
+            {
+                try { return Convert.ToInt32(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarDa", 1) ?? 1) != 0; }
+                catch { return true; }
+            }
+        }
         public static bool Windows11 { get { return ForcarWin11 || Build >= 22000; } }
 
         static int LerBuild()
@@ -630,6 +650,13 @@ namespace Mural
             var largura = (int)(300 * esc);
             var altura = Math.Max((int)(32 * esc), alturaBarra - (int)(8 * esc));
             var y = (alturaBarra - altura) / 2;
+
+            if (Registro.Windows11 || lista_janelas == IntPtr.Zero)
+            {
+                EncaixarWin11(tr, altura);
+                return;
+            }
+
             if (!embutido)
             {
                 TopMost = false;
@@ -637,24 +664,6 @@ namespace Mural
                 Win.SetWindowLong(Handle, Win.GWL_STYLE, (estilo & ~Win.WS_POPUP) | Win.WS_CHILD | Win.WS_CLIPSIBLINGS);
                 Win.SetParent(Handle, bandeja);
                 embutido = true;
-            }
-
-            if (Registro.Windows11 || lista_janelas == IntPtr.Zero)
-            {
-                // Windows 11: a barra é desenhada de outro jeito e não dá para encolher a lista de janelas.
-                // Os ícones ficam no centro, então a barrinha entra no espaço vazio à esquerda do relógio.
-                var area = Win.FindWindowEx(bandeja, IntPtr.Zero, "TrayNotifyWnd", null);
-                Win.RECT nr;
-                int fim;
-                if (area != IntPtr.Zero && Win.GetWindowRect(area, out nr) && nr.Right - nr.Left > 0 && nr.Left > tr.Left)
-                    fim = nr.Left - tr.Left;
-                else
-                    fim = (tr.Right - tr.Left) - (int)(380 * esc); // estimativa: relógio + ícones de sistema
-                var x11 = fim - largura - (int)(8 * esc);
-                Registro.Modo("Windows 11, à esquerda do relógio em x=" + x11 + (area == IntPtr.Zero ? " (área do relógio estimada)" : ""));
-                Posicionar(x11, y, largura, altura);
-                Win.SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, Win.SWP_NOMOVE | Win.SWP_NOSIZE | Win.SWP_NOACTIVATE | Win.SWP_SHOWWINDOW);
-                return;
             }
 
             Registro.Modo("Windows 10, dentro da barra de tarefas");
@@ -667,6 +676,104 @@ namespace Mural
             if (kr.Right - rr.Left > fimLista && fimLista > inicioLista)
                 Win.MoveWindow(lista_janelas, inicioLista, kr.Top - rr.Top, fimLista - inicioLista, kr.Bottom - kr.Top, true);
             Posicionar((rr.Left - tr.Left) + (rr.Right - rr.Left) - largura, y, largura, altura);
+        }
+
+        // ---------- Windows 11
+
+        // No Windows 11 a barra de tarefas é desenhada por cima de qualquer janela colocada dentro dela.
+        // Então a barrinha vira uma janela "presa" à barra (a barra é a dona dela): fica sempre por cima da barra,
+        // e some junto quando um jogo ou vídeo ocupa a tela inteira.
+        bool presa;
+        IntPtr donoAtual;
+        DateTime medidoEm;
+        int medEsq = -1, medDir = -1;
+
+        void EncaixarWin11(Win.RECT tr, int altura)
+        {
+            if (!presa || donoAtual != bandeja)
+            {
+                TopMost = false;
+                Win.DefinirDono(Handle, bandeja);
+                presa = true;
+                donoAtual = bandeja;
+            }
+            var m = (int)(8 * esc);
+            if ((DateTime.Now - medidoEm).TotalSeconds >= 3) { medidoEm = DateTime.Now; MedirBarra11(); }
+
+            // Lado esquerdo: depois da previsão do tempo (botão de Widgets) e antes do botão Iniciar.
+            var esquerda = medEsq > 0 ? medEsq + m : tr.Left + (Registro.WidgetsLigado ? (int)(170 * esc) : m);
+            var largura = (int)(300 * esc);
+            int x;
+            string onde;
+            if (medDir > 0 && medDir - m - esquerda < (int)(180 * esc))
+            {
+                // Não cabe entre o tempo e os ícones (ícones à esquerda ou muitos ícones): vai para perto do relógio.
+                var area = Win.FindWindowEx(bandeja, IntPtr.Zero, "TrayNotifyWnd", null);
+                Win.RECT nr;
+                var fim = area != IntPtr.Zero && Win.GetWindowRect(area, out nr) && nr.Right - nr.Left > 0 ? nr.Left : tr.Right - (int)(380 * esc);
+                x = fim - largura - m;
+                onde = "perto do relógio (não coube à esquerda)";
+            }
+            else
+            {
+                if (medDir > 0) largura = Math.Min(largura, medDir - m - esquerda);
+                x = esquerda;
+                onde = "no lado esquerdo";
+            }
+            var y = tr.Top + (tr.Bottom - tr.Top - altura) / 2;
+            Registro.Modo("Windows 11, presa à barra de tarefas, " + onde +
+                (medDir > 0 ? "" : " (posição dos ícones estimada)") + (medEsq > 0 ? ", depois do tempo" : ""));
+            Posicionar(x, y, largura, altura);
+
+            // A barra de tarefas fica "sempre por cima"; quando um jogo ou vídeo ocupa a tela, o Windows tira isso dela.
+            // A barrinha acompanha: por cima junto com a barra, escondida quando a barra está atrás da tela cheia.
+            var barraPorCima = (Win.GetWindowLong(bandeja, Win.GWL_EXSTYLE) & Win.WS_EX_TOPMOST) != 0;
+            if (barraPorCima)
+            {
+                if (!Visible) Show();
+                Win.SetWindowPos(Handle, Win.HWND_TOPMOST, 0, 0, 0, 0, Win.SWP_NOMOVE | Win.SWP_NOSIZE | Win.SWP_NOACTIVATE | Win.SWP_SHOWWINDOW);
+            }
+            else if (Visible) Hide();
+        }
+
+        /// <summary>Mede, pela acessibilidade do Windows, onde ficam o botão de Widgets (tempo) e o botão Iniciar.</summary>
+        void MedirBarra11()
+        {
+            try
+            {
+                var raiz = System.Windows.Automation.AutomationElement.FromHandle(bandeja);
+                var w = raiz.FindFirst(System.Windows.Automation.TreeScope.Descendants, new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.AutomationIdProperty, "WidgetsButton"));
+                var s = raiz.FindFirst(System.Windows.Automation.TreeScope.Descendants, new System.Windows.Automation.PropertyCondition(
+                    System.Windows.Automation.AutomationElement.AutomationIdProperty, "StartButton"));
+                var esq = w != null && !w.Current.BoundingRectangle.IsEmpty ? (int)w.Current.BoundingRectangle.Right : -1;
+                var dir = s != null && !s.Current.BoundingRectangle.IsEmpty ? (int)s.Current.BoundingRectangle.Left : -1;
+                if (esq != medEsq || dir != medDir)
+                    Registro.Escrever("medida da barra: fim do tempo=" + esq + ", começo do Iniciar=" + dir);
+                medEsq = esq;
+                medDir = dir;
+            }
+            catch (Exception ex) { Registro.Escrever("não consegui medir a barra: " + ex.Message); }
+        }
+
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= 0x80; // WS_EX_TOOLWINDOW: fora do Alt+Tab
+                return cp;
+            }
+        }
+
+        public static bool FechouNormal;
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            FechouNormal = true; // fechou pelo menu, pelo --fechar ou porque o Windows está desligando
+            base.OnFormClosing(e);
         }
 
         Rectangle posicaoAtual;
@@ -988,6 +1095,14 @@ namespace Mural
                     }
                 }
                 Application.Run(new Barra(s, demo));
+            }
+            // A janela sumiu sem ninguém fechar: a barra de tarefas foi recriada (Explorer reiniciou).
+            // Espera a barra nova aparecer e abre de novo.
+            if (!Barra.FechouNormal)
+            {
+                Registro.Escrever("a barra de tarefas foi recriada; abrindo de novo");
+                Thread.Sleep(4000);
+                try { Process.Start(Application.ExecutablePath, string.Join(" ", args)); } catch { }
             }
         }
     }

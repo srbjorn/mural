@@ -15,6 +15,9 @@ namespace Mural { static class Versao { public const int Numero = $versao; } }
     "/resource:$res\rosto_yoshiro.png,Mural.rosto_yoshiro.png" `
     /r:System.Web.Extensions.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll `
     /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
+    "/r:$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationClient.dll" `
+    "/r:$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\WPF\UIAutomationTypes.dll" `
+    "/r:$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\WPF\WindowsBase.dll" `
     "$raiz\pc\barra\MuralBarra.cs" "$raiz\pc\barra\Versao.cs"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 "Compilado: $raiz\pc\MuralBarra.exe (versão $versao)"
