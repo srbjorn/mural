@@ -5,3 +5,6 @@ android/app/build/
 android/local.properties
 *.p12
 *.jks
+
+pc/MuralBarra.exe
+pc/barra/Versao.cs

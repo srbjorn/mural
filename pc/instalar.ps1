@@ -18,8 +18,17 @@ $atalhos = @(
 $atalhoBarra = Join-Path $inicializar "Mural na barra de tarefas.lnk"
 $barra = Join-Path $pasta "MuralBarra.exe"
 
+# Pede para a barrinha aberta (de qualquer pasta) se fechar e espera ela sair; se não sair em 10 s, encerra.
+function Fechar-Barra([string]$exe) {
+    if (-not (Get-Process MuralBarra -ErrorAction SilentlyContinue)) { return }
+    if (Test-Path $exe) { Start-Process $exe -ArgumentList "--fechar" -Wait }
+    for ($i = 0; $i -lt 20 -and (Get-Process MuralBarra -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
+    Get-Process MuralBarra -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
 if ($Remover) {
-    if (Test-Path $barra) { Start-Process $barra -ArgumentList "--fechar" -Wait; Start-Sleep 1 }
+    Fechar-Barra $barra
     foreach ($c in @($atalhos.Caminho) + $atalhoBarra) { if (Test-Path $c) { Remove-Item -LiteralPath $c -Confirm:$false } }
     if (Test-Path $pasta) { Remove-Item -LiteralPath $pasta -Recurse -Confirm:$false }
     Write-Host "Mural removido deste PC."
@@ -54,7 +63,7 @@ foreach ($a in $atalhos) {
 # Barrinha na barra de tarefas: fecha a versão antiga (se houver), copia a nova e abre.
 $barraOrigem = Join-Path $PSScriptRoot "MuralBarra.exe"
 if (Test-Path $barraOrigem) {
-    if (Test-Path $barra) { Start-Process $barra -ArgumentList "--fechar" -Wait; Start-Sleep 2 }
+    Fechar-Barra $barraOrigem
     Copy-Item $barraOrigem $barra -Force
     $lnk = $shell.CreateShortcut($atalhoBarra)
     $lnk.TargetPath = $barra

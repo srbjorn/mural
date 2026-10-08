@@ -74,6 +74,16 @@ namespace Mural
             }
         }
 
+        public static string Get(string url)
+        {
+            var req = (HttpWebRequest)WebRequest.Create(url);
+            req.Timeout = 20000;
+            req.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
+            using (var r = (HttpWebResponse)req.GetResponse())
+            using (var sr = new StreamReader(r.GetResponseStream(), Encoding.UTF8))
+                return sr.ReadToEnd();
+        }
+
         public static string CodigoDoErro(string corpo)
         {
             try
@@ -191,7 +201,7 @@ namespace Mural
     {
         public string Quando, Titulo, Autor, Hora;
         public DateTime Dia;
-        public bool Atrasado, Niver;
+        public bool Atrasado, Niver, Atualizacao;
     }
 
     static class Dados
@@ -507,6 +517,11 @@ namespace Mural
         readonly System.Windows.Forms.Timer tAnim = new System.Windows.Forms.Timer { Interval = 15 };
         readonly System.Windows.Forms.Timer tEncaixe = new System.Windows.Forms.Timer { Interval = 1500 };
         readonly System.Windows.Forms.Timer tDados = new System.Windows.Forms.Timer { Interval = 120000 };
+        readonly System.Windows.Forms.Timer tVersao = new System.Windows.Forms.Timer { Interval = 20000 }; // 20 s, depois a cada 6 h
+        int versaoNova;
+        string zipNovo;
+        bool atualizando;
+        ToolStripItem itemAtualizar;
         readonly ToolTip dica = new ToolTip { InitialDelay = 400, ReshowDelay = 200, AutoPopDelay = 20000 };
         IntPtr bandeja, lista_janelas, rebar;
         bool embutido, buscando, pausado;
@@ -534,6 +549,9 @@ namespace Mural
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Sair da conta", null, (a, b) => SairDaConta());
             menu.Items.Add("Abrir o registro (diagnóstico)", null, (a, b) => Registro.Abrir());
+            itemAtualizar = menu.Items.Add("Atualizar a barrinha", null, (a, b) => InstalarAtualizacao());
+            itemAtualizar.Visible = false;
+            tVersao.Tick += (a, b) => { tVersao.Interval = 6 * 60 * 60 * 1000; VerificarVersao(); };
             menu.Items.Add("Fechar a barra", null, (a, b) => Close());
             ContextMenuStrip = menu;
 
@@ -543,7 +561,12 @@ namespace Mural
             tDados.Tick += (a, b) => Atualizar();
             MouseEnter += (a, b) => pausado = true;
             MouseLeave += (a, b) => pausado = false;
-            MouseClick += (a, b) => { if (b.Button == MouseButtons.Left) AbrirMural(); };
+            MouseClick += (a, b) =>
+            {
+                if (b.Button != MouseButtons.Left) return;
+                var c = lista.Count > 0 ? lista[Math.Min(atual, lista.Count - 1)] : null;
+                if (c != null && c.Atualizacao) InstalarAtualizacao(); else AbrirMural();
+            };
             MouseWheel += (a, b) => Girar(b.Delta < 0 ? 1 : -1);
             Cursor = Cursors.Hand;
         }
@@ -565,6 +588,7 @@ namespace Mural
             tGirar.Start();
             tEncaixe.Start();
             tDados.Start();
+            if (!demo) tVersao.Start();
             Atualizar();
         }
 
@@ -704,6 +728,7 @@ namespace Mural
                     lista = novos;
                     aviso = novos.Count == 0 ? "Nada marcado nos próximos dias" : null;
                 }
+                IncluirAvisoDeVersao();
                 if (atual >= lista.Count) atual = 0;
             }
             catch (ErroMural e)
@@ -722,6 +747,87 @@ namespace Mural
             anim = 0f;
             tAnim.Start();
             Invalidate();
+        }
+
+        // ---------- atualização da própria barrinha
+
+        /// <summary>Lê versao.json (publicado com o site). Se a barrinha publicada for mais nova, mostra o aviso.</summary>
+        async void VerificarVersao()
+        {
+            try
+            {
+                var url = Config.Site + "versao.json?t=" + DateTime.UtcNow.Ticks;
+                var json = await Task.Run(() => Api.Get(url));
+                var d = (Dictionary<string, object>)Api.Ler(json);
+                var pc = d.ContainsKey("pc") ? Convert.ToInt32(d["pc"]) : 0;
+                var zip = d.ContainsKey("pcZip") ? Convert.ToString(d["pcZip"]) : null;
+                if (pc > Versao.Numero && !string.IsNullOrEmpty(zip))
+                {
+                    if (versaoNova != pc) Registro.Escrever("nova versão da barrinha disponível: " + pc + " (esta é " + Versao.Numero + ")");
+                    versaoNova = pc;
+                    zipNovo = zip;
+                    itemAtualizar.Visible = true;
+                    IncluirAvisoDeVersao();
+                    atual = 0;
+                    anim = 0f;
+                    tAnim.Start();
+                    AtualizarDica();
+                }
+            }
+            catch (Exception ex) { Registro.Escrever("não consegui ver se há versão nova: " + ex.Message); }
+        }
+
+        void IncluirAvisoDeVersao()
+        {
+            lista.RemoveAll(c => c.Atualizacao);
+            if (versaoNova <= Versao.Numero) return;
+            lista.Insert(0, new Compromisso
+            {
+                Atualizacao = true, Autor = "", Hora = "", Dia = DateTime.Today,
+                Quando = atualizando ? "Atualizando…" : "Nova versão",
+                Titulo = atualizando ? "Baixando a barrinha nova" : "Clique aqui para atualizar a barrinha"
+            });
+        }
+
+        /// <summary>Baixa o pacote do PC da última versão e roda o instalador dele (que fecha esta barrinha e abre a nova).</summary>
+        async void InstalarAtualizacao()
+        {
+            if (atualizando || zipNovo == null) return;
+            atualizando = true;
+            IncluirAvisoDeVersao();
+            atual = 0;
+            Invalidate();
+            try
+            {
+                var pasta = Path.Combine(Path.GetTempPath(), "MuralAtualizacao");
+                var zip = zipNovo;
+                await Task.Run(() =>
+                {
+                    if (Directory.Exists(pasta)) Directory.Delete(pasta, true);
+                    Directory.CreateDirectory(pasta);
+                    var arquivo = Path.Combine(pasta, "mural-pc.zip");
+                    using (var wc = new WebClient()) wc.DownloadFile(zip, arquivo);
+                    System.IO.Compression.ZipFile.ExtractToDirectory(arquivo, Path.Combine(pasta, "pc"));
+                });
+                var instalador = Path.Combine(pasta, "pc", "instalar.ps1");
+                Registro.Escrever("instalando a versão " + versaoNova);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + instalador + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                Close(); // o instalador copia a barrinha nova e abre de novo
+            }
+            catch (Exception ex)
+            {
+                Registro.Escrever("falhou ao atualizar: " + ex.Message);
+                atualizando = false;
+                aviso = "Não consegui atualizar agora. Tente de novo mais tarde.";
+                IncluirAvisoDeVersao();
+                Invalidate();
+            }
         }
 
         void PedirLogin()
@@ -787,8 +893,9 @@ namespace Mural
             var alfa = (int)(255 * Suave(anim));
 
             // Rosto de quem anotou, com anel na cor da pessoa
-            var corPessoa = c == null ? apagado : c.Autor == "yoshiro" ? Verde : Roxo;
-            var rosto = c == null ? null : c.Autor == "yoshiro" ? rostoY : rostoB;
+            var azul = Color.FromArgb(77, 163, 255);
+            var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Autor == "yoshiro" ? Verde : Roxo;
+            var rosto = c == null || c.Atualizacao ? null : c.Autor == "yoshiro" ? rostoY : rostoB;
             var rf = new Rectangle(pad, pad, face, face);
             if (rosto != null)
             {
@@ -804,6 +911,11 @@ namespace Mural
             else
             {
                 using (var b = new SolidBrush(Color.FromArgb(alfa, corPessoa))) g.FillEllipse(b, rf);
+                if (c != null && c.Atualizacao)
+                    using (var fs = new Font("Segoe UI Semibold", 11f))
+                    using (var bs = new SolidBrush(Color.White))
+                    using (var centro = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        g.DrawString("↑", fs, bs, rf, centro);
             }
             using (var p = new Pen(corPessoa, Math.Max(2f, 2f * esc))) g.DrawEllipse(p, rf);
 
@@ -825,7 +937,7 @@ namespace Mural
             // Duas linhas: quando (colorido) e o título
             var linha1 = c == null ? "Mural" : c.Quando;
             var linha2 = c == null ? aviso ?? "" : c.Titulo;
-            var cor1 = c == null ? apagado : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
+            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
             if (claro && c != null && !c.Niver && !c.Atrasado) cor1 = c.Autor == "yoshiro" ? Color.FromArgb(23, 115, 75) : Color.FromArgb(116, 16, 196);
             var area = new RectangleF(xTexto, 0, Math.Max(10, direita - xTexto), Height);
             using (var f1 = new Font("Segoe UI Semibold", 7.5f))

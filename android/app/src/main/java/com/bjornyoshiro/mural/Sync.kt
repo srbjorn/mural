@@ -163,6 +163,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
             WidgetDados.salvar(ctx, resumo)
             Avisos.novidades(ctx, itens, eu)
             if (inputData.getBoolean("resumoDoDia", false)) Avisos.resumoDoDia(ctx, resumo)
+            Atualizacao.verificar(ctx)
             Result.success()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()

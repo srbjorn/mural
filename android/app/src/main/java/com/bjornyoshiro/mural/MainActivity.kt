@@ -95,4 +95,8 @@ class Ponte(private val ctx: Context) {
 
     @JavascriptInterface
     fun atualizarWidget() = Sync.agora(ctx)
+
+    /** Versão instalada do app; o mural compara com versao.json para mostrar o aviso de atualização. */
+    @JavascriptInterface
+    fun versaoApp(): Int = BuildConfig.VERSION_CODE
 }

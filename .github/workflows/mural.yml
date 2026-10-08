@@ -1,5 +1,8 @@
 name: Mural
 
+# Ordem: barrinha do PC (Windows) → app Android + release com os dois arquivos → site com versao.json.
+# O versao.json só sai depois que a release existe, para o aviso de atualização nunca apontar para um arquivo que ainda não está lá.
+
 on:
   push:
     branches: [main]
@@ -15,21 +18,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  site:
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+  pc:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Compilar a barrinha da barra de tarefas
+        shell: powershell
+        run: |
+          ./tools/compilar-barra.ps1
+          if (-not (Test-Path pc/MuralBarra.exe)) { exit 1 }
+          Compress-Archive -Path pc/INSTALAR.bat, pc/instalar.ps1, pc/mural.ico, pc/MuralBarra.exe -DestinationPath mural-pc.zip
+      - uses: actions/upload-artifact@v4
         with:
-          path: web
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          name: mural-pc
+          path: mural-pc.zip
 
   apk:
+    needs: pc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,10 +67,41 @@ jobs:
 
       - run: cp android/app/build/outputs/apk/release/app-release.apk mural.apk
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: mural-pc
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Mural 1.0.${{ github.run_number }}
-          body: Baixe o mural.apk no celular e instale (ele atualiza por cima da versão anterior).
-          files: mural.apk
+          body: |
+            mural.apk: app do celular (instale por cima; as anotações não se perdem).
+            mural-pc.zip: instalador do PC (extraia e dê dois cliques em INSTALAR.bat).
+          files: |
+            mural.apk
+            mural-pc.zip
           make_latest: true
+
+  site:
+    needs: apk
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Escrever versao.json
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/latest/download"
+          app=$(tr -d '[:space:]' < android/versao.txt)
+          pc=$(tr -d '[:space:]' < pc/barra/versao.txt)
+          printf '{"site": %s, "app": %s, "pc": %s, "apk": "%s/mural.apk", "pcZip": "%s/mural-pc.zip"}\n' \
+            "${{ github.run_number }}" "$app" "$pc" "$base" "$base" > web/versao.json
+          cat web/versao.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

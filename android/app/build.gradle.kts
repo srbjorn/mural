@@ -8,6 +8,8 @@ plugins {
 // Endereço do mural na web (GitHub Pages). O workflow passa MURAL_SITE; localmente usa o padrão.
 val site = System.getenv("MURAL_SITE") ?: "https://srbjorn.github.io/mural/"
 val numero = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+// Versão do app: só muda quando android/versao.txt é aumentado; é o que o aviso de atualização compara.
+val versaoApp = rootProject.file("versao.txt").readText().trim().toInt()
 val chave = System.getenv("MURAL_KEYSTORE")
 
 android {
@@ -18,8 +20,8 @@ android {
         applicationId = "com.bjornyoshiro.mural"
         minSdk = 26
         targetSdk = 34
-        versionCode = numero
-        versionName = "1.0.$numero"
+        versionCode = versaoApp
+        versionName = "$versaoApp (build $numero)"
         buildConfigField("String", "SITE", "\"$site\"")
     }
 

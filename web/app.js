@@ -216,6 +216,33 @@ function erroDados(e) {
 }
 function avisarNativo() { try { ponte?.atualizarWidget(); } catch {} }
 
+/* ============ Versões novas ============ */
+// versao.json é publicado junto com o site: { site, app, pc, apk, pcZip }.
+const V = { carregada: null, atual: null };
+const versaoDoApp = () => { try { return typeof ponte?.versaoApp === "function" ? Number(ponte.versaoApp()) : 0; } catch { return 0; } };
+async function verificarVersao() {
+  if (DEMO) return;
+  try {
+    const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const v = await r.json();
+    if (V.carregada === null) V.carregada = v.site;
+    const antes = JSON.stringify(V.atual);
+    V.atual = v;
+    if (antes !== JSON.stringify(v) && S.user && eu()) render();
+  } catch {}
+}
+function avisosDeVersao() {
+  const v = V.atual;
+  if (!v) return "";
+  let html = "";
+  if (ponte && Number(v.app) > versaoDoApp() && v.apk)
+    html += `<p class="banner versao">Tem uma versão nova do app do celular. <a class="btn btn-small btn-main" href="${esc(v.apk)}">Baixar e instalar</a><span class="vazio">Instale por cima; as anotações não se perdem.</span></p>`;
+  else if (V.carregada !== null && Number(v.site) > Number(V.carregada))
+    html += `<p class="banner versao">Tem uma versão nova do mural. <button class="btn btn-small btn-main" data-act="recarregar">Atualizar agora</button></p>`;
+  return html;
+}
+
 /* ============ Render ============ */
 function render() {
   if (!S.user) { $app.innerHTML = telaEntrada(); return; }
@@ -511,6 +538,7 @@ function telaPainel() {
   return `
   ${topo()}
   ${S.erro ? `<p class="banner" role="alert">${esc(S.erro)}</p>` : ""}
+  ${avisosDeVersao()}
   ${DEMO ? `<p class="banner">Demonstração com dados de exemplo. ${configurado ? "" : "O Firebase ainda não foi configurado (web/firebase-config.js)."}</p>` : ""}
   <main class="board">
     <div class="col">${calendario()}${proximosEventos()}</div>
@@ -735,6 +763,7 @@ document.addEventListener("click", (ev) => {
     case "apagar-nao": render(); break;
     case "aviso": abrirAviso(); break;
     case "visto": marcarVisto(); break;
+    case "recarregar": location.reload(); break;
   }
 });
 
@@ -807,3 +836,6 @@ let diaAtual = hoje();
 setInterval(() => { if (hoje() !== diaAtual) { diaAtual = hoje(); if (S.user && eu()) render(); } }, 60e3);
 
 iniciar();
+verificarVersao();
+setInterval(verificarVersao, 30 * 60e3);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) verificarVersao(); });

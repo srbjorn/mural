@@ -54,7 +54,23 @@ object Avisos {
         mostrar(ctx, 1, titulo, texto, "aviso")
     }
 
+    /** "Nova versão do Mural": tocar abre o download do APK no navegador. */
+    fun atualizacao(ctx: Context, apk: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apk)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        notificar(ctx, 3, "Nova versão do Mural", "Toque para baixar e instalar por cima. As anotações não se perdem.",
+            PendingIntent.getActivity(ctx, 3, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+    }
+
     private fun mostrar(ctx: Context, id: Int, titulo: String, texto: String, abrir: String) {
+        val intent = Intent(ctx, MainActivity::class.java)
+            .putExtra("abrir", abrir)
+            .setData(Uri.parse("mural://$abrir/$id"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        notificar(ctx, id, titulo, texto,
+            PendingIntent.getActivity(ctx, id, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+    }
+
+    private fun notificar(ctx: Context, id: Int, titulo: String, texto: String, pi: PendingIntent) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
@@ -63,11 +79,6 @@ object Avisos {
                 description = "Novidades do mural e resumo do dia"
             },
         )
-        val intent = Intent(ctx, MainActivity::class.java)
-            .putExtra("abrir", abrir)
-            .setData(Uri.parse("mural://$abrir/$id"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        val pi = PendingIntent.getActivity(ctx, id, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, CANAL)
             .setSmallIcon(R.drawable.ic_notif)
             .setColor(0xFFA400FF.toInt())
