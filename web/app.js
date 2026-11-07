@@ -1,16 +1,16 @@
 import { firebaseConfig } from "./firebase-config.js";
 
 /* ============ Constantes ============ */
-const NOME = { bjorn: "Bjørn", yoshiro: "Yoshiro" };
-const CLS = { bjorn: "bj", yoshiro: "yo" };
-// Foto de perfil: rosto da figurinha de cada um, com anel na cor dele (Bjørn roxo, Yoshiro verde).
-const ROSTO = { bjorn: "img/rosto-bjorn.webp", yoshiro: "img/rosto-yoshiro.webp" };
-const marca = (q, extra = "") => `<img class="mk ${CLS[q] || ""} ${extra}" src="${ROSTO[q] || ROSTO.bjorn}" alt="" aria-hidden="true">`;
+// O mural é de uma pessoa só: tudo é dele, com o verde e o rosto da figurinha dele.
+const DONO = "yoshiro";
+const NOME = { yoshiro: "Yoshiro" };
+const CLS = { yoshiro: "yo" };
+const ROSTO = { yoshiro: "img/rosto-yoshiro.webp" };
+const marca = (q, extra = "") => `<img class="mk yo ${extra}" src="${ROSTO.yoshiro}" alt="" aria-hidden="true">`;
 const TIPO = { nota: "Anotação", checklist: "Checklist", evento: "Evento", meta: "Meta", aniversario: "Aniversário" };
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const TIPO_PLURAL = { tudo: "Tudo", nota: "Anotações", checklist: "Checklists", evento: "Eventos", meta: "Metas" };
 const PRIO = { 3: "Muito importante", 2: "Importante", 1: "Menos importante" };
-const outro = (q) => (q === "bjorn" ? "yoshiro" : "bjorn");
 
 const ponte = window.AndroidBridge || null; // existe só dentro do app Android
 const params = new URLSearchParams(location.search);
@@ -60,9 +60,9 @@ const S = {
   modo: "entrar",      // tela de entrada: entrar | criar
   ui: Object.assign({ vista: "quadro", prio: 3, tipo: "tudo", autor: "todos", concluidos: false, mes: hoje().slice(0, 7), dia: null }, ler("mural-ui", {})),
 };
-const eu = () => S.pessoas[S.user?.uid]?.quem || null;
+const eu = () => (S.user ? DONO : null);
 const vistoEm = () => S.pessoas[S.user?.uid]?.vistoEm || 0;
-function salvarUi() { guardar("mural-ui", { vista: S.ui.vista, prio: S.ui.prio, tipo: S.ui.tipo, autor: S.ui.autor, concluidos: S.ui.concluidos }); }
+function salvarUi() { guardar("mural-ui", { vista: S.ui.vista, prio: S.ui.prio, tipo: S.ui.tipo, concluidos: S.ui.concluidos }); }
 
 /* ============ Aniversários ============ */
 // Guardados com niver: "MM-DD" e ano (opcional); repetem todo ano e ficam fora das abas de importância.
@@ -240,7 +240,7 @@ function fmtQuando(it) {
   if (noDia(it, h)) return fim(it) === h ? "Último dia" + hora : `Acontecendo · até ${fmtDia(fim(it)).toLowerCase()}`;
   return `${fmtDia(it.data)} até ${fmtDia(fim(it)).toLowerCase()}${hora}`;
 }
-const ehNovo = (it) => it.autor && it.autor !== eu() && (it.criadoEm || 0) > vistoEm();
+const ehNovo = () => false; // uma pessoa só: não há "novidades do outro"
 const pendentes = () => S.itens.filter((i) => !i.feito && i.tipo !== "aniversario");
 function ordenar(a, b) {
   const aa = atrasado(a) ? 0 : 1, bb = atrasado(b) ? 0 : 1;
@@ -294,24 +294,24 @@ function backendDemo() {
   const h = hoje(), agora = Date.now();
   let itens = [
     { id: "d1", tipo: "evento", titulo: "Consulta no dentista", texto: "Levar a carteirinha do plano.", prioridade: 3, data: h, hora: "15:30", autor: "yoshiro", criadoEm: agora - 3600e3 },
-    { id: "d2", tipo: "checklist", titulo: "Mercado da semana", texto: "", prioridade: 2, data: somaDias(h, 1), hora: "", autor: "bjorn", criadoEm: agora - 86400e3,
+    { id: "d2", tipo: "checklist", titulo: "Mercado da semana", texto: "", prioridade: 2, data: somaDias(h, 1), hora: "", autor: "yoshiro", criadoEm: agora - 86400e3,
       checklist: [{ t: "Arroz", ok: true }, { t: "Café", ok: false }, { t: "Ração dos gatos", ok: false }, { t: "Detergente", ok: true }] },
-    { id: "d3", tipo: "nota", titulo: "Senha nova do wi-fi está no caderno azul", texto: "Mudei ontem à noite.", prioridade: 1, data: null, hora: "", autor: "bjorn", criadoEm: agora - 2 * 86400e3 },
+    { id: "d3", tipo: "nota", titulo: "Senha nova do wi-fi está no caderno azul", texto: "Mudei ontem à noite.", prioridade: 1, data: null, hora: "", autor: "yoshiro", criadoEm: agora - 2 * 86400e3 },
     { id: "d4", tipo: "meta", titulo: "Juntar para a viagem", texto: "", prioridade: 2, data: somaDias(h, 60), hora: "", autor: "yoshiro", criadoEm: agora - 5 * 86400e3,
       checklist: [{ t: "Reserva do hotel", ok: true }, { t: "Passagens", ok: false }, { t: "Passeios", ok: false }] },
-    { id: "d5", tipo: "evento", titulo: "Aniversário de namoro", texto: "", prioridade: 3, data: somaDias(h, 6), hora: "20:00", autor: "bjorn", criadoEm: agora - 7 * 86400e3 },
+    { id: "d5", tipo: "evento", titulo: "Show no sábado", texto: "", prioridade: 3, data: somaDias(h, 6), hora: "20:00", autor: "yoshiro", criadoEm: agora - 7 * 86400e3 },
     { id: "d12", tipo: "nota", titulo: "Tirar o lixo", texto: "", prioridade: 2, data: somaDias(h, 1), hora: "20:00", lembrete: 30, autor: "yoshiro", criadoEm: agora - 40 * 86400e3,
-      repetir: { tipo: "semanal", dias: [2, 5], ate: null }, historico: [{ data: somaDias(h, -2), feitoEm: agora - 2 * 86400e3, por: "bjorn" }] },
-    { id: "d13", tipo: "nota", titulo: "Conta de internet", texto: "Débito automático não pega, pagar pelo app do banco.", prioridade: 3, data: somaDias(h, 2), hora: "", autor: "bjorn", criadoEm: agora - 90 * 86400e3,
+      repetir: { tipo: "semanal", dias: [2, 5], ate: null }, historico: [{ data: somaDias(h, -2), feitoEm: agora - 2 * 86400e3, por: "yoshiro" }] },
+    { id: "d13", tipo: "nota", titulo: "Conta de internet", texto: "Débito automático não pega, pagar pelo app do banco.", prioridade: 3, data: somaDias(h, 2), hora: "", autor: "yoshiro", criadoEm: agora - 90 * 86400e3,
       repetir: { tipo: "mensal", dia: Number(somaDias(h, 2).slice(8)), ate: null }, historico: [{ data: somaDias(h, -29), feitoEm: agora - 30 * 86400e3, por: "yoshiro" }] },
-    { id: "d11", tipo: "evento", titulo: "Ultimate Drift", texto: "Levar protetor e garrafa d'água.", prioridade: 2, data: somaDias(h, -1), dataFim: somaDias(h, 1), hora: "", autor: "bjorn", criadoEm: agora - 3 * 86400e3 },
+    { id: "d11", tipo: "evento", titulo: "Ultimate Drift", texto: "Levar protetor e garrafa d'água.", prioridade: 2, data: somaDias(h, -1), dataFim: somaDias(h, 1), hora: "", autor: "yoshiro", criadoEm: agora - 3 * 86400e3 },
     { id: "d6", tipo: "nota", titulo: "Pagar a conta de luz", texto: "Vence amanhã, boleto no email.", prioridade: 3, data: somaDias(h, -1), hora: "", autor: "yoshiro", criadoEm: agora - 600e3 },
-    { id: "d7", tipo: "meta", titulo: "Treinar 3x por semana", texto: "", prioridade: 1, data: null, hora: "", autor: "bjorn", criadoEm: agora - 9 * 86400e3, progresso: 40, checklist: [] },
+    { id: "d7", tipo: "meta", titulo: "Treinar 3x por semana", texto: "", prioridade: 1, data: null, hora: "", autor: "yoshiro", criadoEm: agora - 9 * 86400e3, progresso: 40, checklist: [] },
     { id: "d8", tipo: "aniversario", titulo: "Lucas", texto: "Gosta de jogo de tabuleiro.", prioridade: 0, data: null, hora: "", niver: h.slice(5), ano: 1996, autor: "yoshiro", criadoEm: agora - 20 * 86400e3 },
-    { id: "d9", tipo: "aniversario", titulo: "Mari", texto: "", prioridade: 0, data: null, hora: "", niver: somaDias(h, 4).slice(5), ano: null, autor: "bjorn", criadoEm: agora - 30 * 86400e3 },
-    { id: "d10", tipo: "aniversario", titulo: "Tia Rose", texto: "Ligar de manhã.", prioridade: 0, data: null, hora: "", niver: somaDias(h, 45).slice(5), ano: 1970, autor: "bjorn", criadoEm: agora - 40 * 86400e3 },
+    { id: "d9", tipo: "aniversario", titulo: "Mari", texto: "", prioridade: 0, data: null, hora: "", niver: somaDias(h, 4).slice(5), ano: null, autor: "yoshiro", criadoEm: agora - 30 * 86400e3 },
+    { id: "d10", tipo: "aniversario", titulo: "Tia Rose", texto: "Ligar de manhã.", prioridade: 0, data: null, hora: "", niver: somaDias(h, 45).slice(5), ano: 1970, autor: "yoshiro", criadoEm: agora - 40 * 86400e3 },
   ];
-  let pessoas = { demo: { quem: "bjorn", vistoEm: agora - 2 * 3600e3 } };
+  let pessoas = { demo: { quem: "yoshiro", vistoEm: agora - 2 * 3600e3 } };
   const fi = new Set(), fp = new Set();
   const emitir = () => { fi.forEach((f) => f(itens.map((i) => ({ ...i })))); fp.forEach((f) => f({ ...pessoas })); };
   return {
@@ -345,11 +345,23 @@ async function iniciar() {
     paraItens?.(); paraPessoas?.(); paraItens = paraPessoas = null;
     S.itens = []; S.pessoas = {}; S.pronto = false;
     if (u) {
-      paraItens = S.backend.observarItens((lista) => { S.itens = lista; S.pronto = true; render(); }, erroDados);
-      paraPessoas = S.backend.observarPessoas((m) => { S.pessoas = m; render(); }, erroDados);
+      paraItens = S.backend.observarItens((lista) => { S.itens = lista; S.pronto = true; passarTudoParaODono(lista); render(); }, erroDados);
+      paraPessoas = S.backend.observarPessoas((m) => { S.pessoas = m; passarTudoParaODono(S.itens); render(); }, erroDados);
     }
     render();
   });
+}
+/** O mural agora é de uma pessoa só: o que estava no nome de outra pessoa passa para o dele (inclusive o histórico). */
+function passarTudoParaODono(lista) {
+  if (DEMO) return;
+  const uidDono = Object.keys(S.pessoas).find((uid) => S.pessoas[uid]?.quem === DONO) || null;
+  for (const it of lista) {
+    const o = {};
+    if (it.autor !== DONO) o.autor = DONO;
+    if (it.autorUid && uidDono && it.autorUid !== uidDono) o.autorUid = uidDono;
+    if ((it.historico || []).some((h) => h.por && h.por !== DONO)) o.historico = it.historico.map((h) => ({ ...h, por: DONO }));
+    if (Object.keys(o).length) S.backend.salvarItem(it.id, o).catch((e) => console.error(e));
+  }
 }
 function erroDados(e) {
   console.error(e);
@@ -401,7 +413,6 @@ function avisosDeVersao() {
 function render() {
   if (!S.user) { $app.innerHTML = telaEntrada(); return; }
   if (!S.pronto && !DEMO) { $app.innerHTML = telaMensagem("Abrindo o mural…", ""); return; }
-  if (!eu()) { $app.innerHTML = telaQuem(); return; }
   $app.innerHTML = telaPainel();
   if (aberturaPendente) { const a = aberturaPendente; aberturaPendente = null; a(); }
 }
@@ -415,48 +426,30 @@ function telaEntrada() {
   const criar = S.modo === "criar";
   return `
   <div class="gate">
-    <div class="gate-oc bj" aria-hidden="true">${marca("bjorn", "huge")}<span>Bjørn</span></div>
+    <div class="gate-oc yo" aria-hidden="true">${marca(DONO, "huge")}<span>Mural</span></div>
     <form class="gate-card sticker" id="f-entrar" novalidate>
-      <h1>Mural do <span class="bj">Bjørn</span> &amp; do <span class="yo">Yoshiro</span></h1>
-      <p>${criar ? "Crie a sua conta. Cada um de vocês usa a própria." : "Entre com a sua conta para ver o que vocês dois anotaram."}</p>
+      <h1>Mural</h1>
+      <p>${criar ? "Crie a sua conta." : "Entre com a sua conta para ver suas anotações."}</p>
       <div class="field"><label for="in-email">Email</label><input class="input" id="in-email" type="email" autocomplete="email" required></div>
       <div class="field"><label for="in-senha">Senha</label><input class="input" id="in-senha" type="password" autocomplete="${criar ? "new-password" : "current-password"}" minlength="6" required></div>
       <p class="erro" role="alert">${esc(S.erro)}</p>
       <button class="btn btn-main" type="submit">${criar ? "Criar conta" : "Entrar"}</button>
       <button class="btn btn-ghost" type="button" data-act="modo">${criar ? "Já tenho conta" : "Primeira vez? Criar conta"}</button>
     </form>
-    <div class="gate-oc yo" aria-hidden="true">${marca("yoshiro", "huge")}<span>Yoshiro</span></div>
-  </div>`;
-}
-
-function telaQuem() {
-  return `
-  <div class="gate">
-    <div></div>
-    <div class="gate-card sticker">
-      <h1>Quem é você?</h1>
-      <p>Isso aparece nas suas anotações, para o outro saber quem escreveu.</p>
-      <div class="picker">
-        <button class="pick bj" data-act="souu" data-q="bjorn">${marca("bjorn", "huge")}Sou o Bjørn</button>
-        <button class="pick yo" data-act="souu" data-q="yoshiro">${marca("yoshiro", "huge")}Sou o Yoshiro</button>
-      </div>
-      <button class="btn btn-ghost" data-act="sair">Sair desta conta</button>
-    </div>
     <div></div>
   </div>`;
 }
 
 function topo() {
-  const r = resumo(), meu = eu(), dele = outro(meu);
+  const r = resumo();
   const d = new Date();
   const dataLonga = d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-  const contagem = (q) => pendentes().filter((i) => i.autor === q).length;
   return `
   <header class="top">
-    <div class="top-oc bj">${marca("bjorn", "big")}<div class="who"><b>Bjørn</b><span>${contagem("bjorn")} pendentes</span></div></div>
+    <div class="top-oc yo">${marca(DONO, "big")}<div class="who"><b>Mural</b><span>${pendentes().length} pendentes</span></div></div>
     <div class="top-mid">
       <div class="top-row">
-        <div class="date-big"><small>${saudacao()}, ${NOME[meu]}</small>${esc(dataLonga)}</div>
+        <div class="date-big"><small>${saudacao()}, ${NOME[DONO]}</small>${esc(dataLonga)}</div>
         <div class="top-actions">
           <button class="btn btn-small" data-act="aviso">Aviso do dia</button>
           <button class="btn btn-small btn-ghost" data-act="sair">Sair</button>
@@ -469,10 +462,9 @@ function topo() {
         ${r.niverHoje.length ? `<button class="pill niver" data-act="vista" data-v="niver">Aniversário hoje: ${esc(r.niverHoje.join(", "))}</button>` : ""}
         ${r.urgentes ? `<span class="pill p3">${r.urgentes} muito importante${r.urgentes > 1 ? "s" : ""}</span>` : ""}
         ${r.atrasados ? `<span class="pill p3">${r.atrasados} atrasad${r.atrasados > 1 ? "as" : "a"}</span>` : ""}
-        ${r.novos ? `<button class="pill novo ${CLS[dele]}" data-act="visto">${r.novos} novidade${r.novos > 1 ? "s" : ""} do ${NOME[dele]} · marcar como visto</button>` : ""}
       </div>
     </div>
-    <div class="top-oc yo">${marca("yoshiro", "big")}<div class="who"><b>Yoshiro</b><span>${contagem("yoshiro")} pendentes</span></div></div>
+    <div></div>
   </header>`;
 }
 
@@ -562,7 +554,6 @@ function filtrados() {
   return S.itens.filter((it) =>
     Number(it.prioridade) === u.prio &&
     (u.tipo === "tudo" || it.tipo === u.tipo) &&
-    (u.autor === "todos" || it.autor === u.autor) &&
     (!u.dia || noDia(it, u.dia)) &&
     (u.concluidos || !it.feito)
   ).sort(ordenar);
@@ -584,8 +575,7 @@ function cartao(it) {
   return `
   <article class="item sticker ${c} ${it.feito ? "feito" : ""}" data-card="${esc(it.id)}">
     <div class="item-top">
-      ${marca(q)}
-      <div class="item-meta"><b class="${c}">${NOME[q] || "Alguém"}</b><span>${TIPO[it.tipo] || "Anotação"}${contagem}</span></div>
+      <div class="item-meta"><b>${TIPO[it.tipo] || "Anotação"}${contagem}</b></div>
       ${badge}
     </div>
     <h3 class="item-t">${esc(it.titulo)}</h3>
@@ -593,7 +583,7 @@ function cartao(it) {
     ${repete(it) || (it.lembrete && it.hora) ? `<span class="lembra">${[repete(it) ? `↻ ${textoRepetir(it.repetir)}` : "", it.lembrete && it.hora ? `Lembrete ${(LEMBRETE.find(([v]) => v === Number(it.lembrete)) || [0, `${it.lembrete} min antes`])[1]}` : ""].filter(Boolean).join(" · ")}</span>` : ""}
     ${it.texto ? `<p class="item-x">${esc(it.texto)}</p>` : ""}
     ${checks}${meta}
-    ${(it.historico || []).length ? `<details class="historico"><summary>Feito ${it.historico.length}× · última vez ${esc(fmtDia(it.historico.at(-1).data).toLowerCase())}${it.historico.at(-1).por ? ` (${NOME[it.historico.at(-1).por] || ""})` : ""}</summary><ul>${it.historico.slice(-8).reverse().map((h) => `<li>${esc(new Date(h.data + "T12:00:00").toLocaleDateString("pt-BR"))} — ${esc(NOME[h.por] || "")}, concluído em ${esc(new Date(h.feitoEm).toLocaleDateString("pt-BR"))}</li>`).join("")}</ul></details>` : ""}
+    ${(it.historico || []).length ? `<details class="historico"><summary>Feito ${it.historico.length}× · última vez ${esc(fmtDia(it.historico.at(-1).data).toLowerCase())}</summary><ul>${it.historico.slice(-8).reverse().map((h) => `<li>${esc(new Date(h.data + "T12:00:00").toLocaleDateString("pt-BR"))} — concluído em ${esc(new Date(h.feitoEm).toLocaleDateString("pt-BR"))}</li>`).join("")}</ul></details>` : ""}
     <div class="item-foot" data-foot="${esc(it.id)}">
       <button class="btn btn-small" data-act="feito" data-id="${esc(it.id)}">${it.feito ? "Reabrir" : "Concluir"}</button>
       ${repete(it) && !it.feito ? `<button class="btn btn-small btn-ghost" data-act="pular" data-id="${esc(it.id)}">Pular esta vez</button>` : ""}
@@ -610,8 +600,6 @@ function quadro() {
     return `<button class="tab p${p}" role="tab" aria-selected="${u.prio === p}" data-act="prio" data-p="${p}"><span class="n">${n}</span><span class="t">${PRIO[p]}</span></button>`;
   }).join("");
   const chipsTipo = Object.keys(TIPO_PLURAL).map((t) => `<button class="chip" aria-pressed="${u.tipo === t}" data-act="tipo" data-t="${t}">${TIPO_PLURAL[t]}</button>`).join("");
-  const chipsAutor = [["todos", "Nós dois", ""], ["bjorn", "Bjørn", "bj"], ["yoshiro", "Yoshiro", "yo"]]
-    .map(([v, l, c]) => `<button class="chip ${c}" aria-pressed="${u.autor === v}" data-act="autor" data-a="${v}">${l}</button>`).join("");
   const lista = filtrados();
   const vazio = `
     <div class="empty-board">
@@ -625,7 +613,7 @@ function quadro() {
       <label class="check"><input type="checkbox" data-act="concl" ${u.concluidos ? "checked" : ""}><span>Mostrar concluídos</span></label>
     </div>
     <div class="tabs" role="tablist" aria-label="Importância">${tabs}</div>
-    <div class="filters"><div class="chips">${chipsTipo}</div><span class="sep"></span><div class="chips">${chipsAutor}</div></div>
+    <div class="filters"><div class="chips">${chipsTipo}</div></div>
     ${u.dia ? `<div class="dia-ativo">Mostrando ${esc(fmtDia(u.dia).toLowerCase())} <button class="btn btn-small" data-act="dia" data-d="${u.dia}">Ver todos os dias</button></div>` : ""}
     ${nvDia.length ? `<button class="niver-faixa" data-act="vista" data-v="niver">Aniversário neste dia: ${esc(nvDia.map((x) => x.titulo).join(", "))}</button>` : ""}
     ${lista.length ? `<div class="cards">${lista.map(cartao).join("")}</div>` : vazio}
@@ -646,8 +634,7 @@ function cartaoNiver({ it, dias, idade }) {
   return `
   <article class="item niver-card sticker ${c} ${dias === 0 ? "hoje" : ""}">
     <div class="item-top">
-      ${marca(q)}
-      <div class="item-meta"><b class="${c}">${NOME[q] || "Alguém"}</b><span>anotou</span></div>
+      <div class="item-meta"><b>Aniversário</b></div>
       <span class="badge falta ${dias <= lembrar(it) ? "perto" : ""}">${faltam(dias)}</span>
     </div>
     <h3 class="item-t">${esc(it.titulo)}</h3>
@@ -662,7 +649,7 @@ function cartaoNiver({ it, dias, idade }) {
 }
 
 function abaNiver() {
-  const lista = aniversarios().filter((a) => S.ui.autor === "todos" || a.it.autor === S.ui.autor);
+  const lista = aniversarios();
   // Agrupa por mês, começando no mês atual (a lista já vem na ordem do próximo aniversário).
   const grupos = [];
   for (const a of lista) {
@@ -670,12 +657,9 @@ function abaNiver() {
     const g = grupos.at(-1);
     if (g && g.nome === nome) g.itens.push(a); else grupos.push({ nome, itens: [a] });
   }
-  const chipsAutor = [["todos", "Nós dois", ""], ["bjorn", "Bjørn", "bj"], ["yoshiro", "Yoshiro", "yo"]]
-    .map(([v, l, c]) => `<button class="chip ${c}" aria-pressed="${S.ui.autor === v}" data-act="autor" data-a="${v}">${l}</button>`).join("");
   return `
   <section class="panel sticker" aria-label="Aniversários">
     <div class="panel-h">${vistas()}<button class="btn btn-small btn-main" data-act="novo" data-tipo="aniversario">+ Aniversário</button></div>
-    <div class="filters"><div class="chips">${chipsAutor}</div></div>
     ${grupos.length ? grupos.map((g) => `
       <div class="mes-grupo">
         <h3 class="mes-h">${esc(g.nome.charAt(0).toUpperCase() + g.nome.slice(1))}</h3>
@@ -848,7 +832,7 @@ async function salvarEditor() {
   const id = E.id;
   if (!id) Object.assign(o, { feito: false, autor: eu(), autorUid: S.user.uid, criadoEm: Date.now() });
   E = null; renderEditor();
-  gravar(S.backend.salvarItem(id, o), id ? "Salvo." : "Anotado! Já aparece pro " + NOME[outro(eu())] + ".");
+  gravar(S.backend.salvarItem(id, o), id ? "Salvo." : "Anotado!");
 }
 function gravar(promessa, ok) {
   if (ok) toast(ok);
@@ -858,26 +842,24 @@ function gravar(promessa, ok) {
 
 /* ============ Aviso do dia ============ */
 function abrirAviso() {
-  const h = hoje(), meu = eu(), dele = outro(meu), p = pendentes();
+  const h = hoje(), p = pendentes();
   const deHoje = p.filter((i) => noDia(i, h)).sort(ordenar);
   const atras = p.filter(atrasado).sort(ordenar);
   const urg = p.filter((i) => Number(i.prioridade) === 3 && !noDia(i, h) && !atrasado(i)).sort(ordenar).slice(0, 6);
-  const novos = S.itens.filter(ehNovo).sort((a, b) => b.criadoEm - a.criadoEm).slice(0, 6);
   const li = (it, extra) => `<li><i class="dot ${CLS[it.autor]}"></i>${esc(it.titulo)}<small>${extra ?? (it.data && fim(it) !== it.data ? fmtQuando(it) : it.hora || fmtDia(it.data) || TIPO[it.tipo])}</small></li>`;
   const sec = (t, arr, f) => (arr.length ? `<div class="aviso-sec"><h3>${t}</h3><ul>${arr.map(f || ((it) => li(it))).join("")}</ul></div>` : "");
   const nivers = niversParaLembrar();
   const { proxima } = estacaoAgora();
   const estChegando = proxima && diasAte(proxima.inicio) <= 7 ? proxima : null;
-  const nada = !deHoje.length && !atras.length && !urg.length && !novos.length && !nivers.length && !estChegando;
+  const nada = !deHoje.length && !atras.length && !urg.length && !nivers.length && !estChegando;
   $layer.innerHTML = `
   <div class="overlay" data-av="fundo">
     <section class="aviso sticker" role="dialog" aria-modal="true" aria-labelledby="h-av">
       <div class="aviso-oc bj" aria-hidden="true"></div>
       <div class="aviso-body">
-        <h2 id="h-av">${saudacao()}, ${NOME[meu]}!</h2>
+        <h2 id="h-av">${saudacao()}, ${NOME[DONO]}!</h2>
         ${sec("Aniversários", nivers, (a) => `<li><i class="dot niver ${CLS[a.it.autor]}"></i>${esc(a.it.titulo)}${a.idade ? ` (faz ${a.idade})` : ""}<small>${a.dias === 0 ? "Hoje!" : falta(a.it)}</small></li>`)}
         ${estChegando ? `<div class="aviso-sec"><h3>Estação</h3><ul><li class="estacao ${estChegando.cls}"><b aria-hidden="true">${estChegando.simbolo}</b>${estChegando.chave === "primavera" ? "A" : "O"} ${estChegando.nome.toLowerCase()} começa ${diasAte(estChegando.inicio) === 0 ? "hoje" : diasAte(estChegando.inicio) === 1 ? "amanhã" : `em ${diasAte(estChegando.inicio)} dias`}<small>${estChegando.inicio.toLocaleDateString("pt-BR", { day: "numeric", month: "short" }).replace(".", "")}, ${estChegando.inicio.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></li></ul></div>` : ""}
-        ${sec(`Novidades do ${NOME[dele]}`, novos, (it) => li(it, TIPO[it.tipo]))}
         ${sec("Hoje", deHoje)}
         ${sec("Atrasados", atras)}
         ${sec("Muito importante", urg)}
@@ -945,10 +927,8 @@ document.addEventListener("click", (ev) => {
   switch (a) {
     case "modo": S.modo = S.modo === "criar" ? "entrar" : "criar"; S.erro = ""; render(); break;
     case "sair": S.backend.sair(); try { ponte?.sair(); } catch {} break;
-    case "souu": S.backend.salvarPessoa(S.user.uid, { quem: b.dataset.q, vistoEm: Date.now() }).catch(erroDados); break;
     case "prio": u.prio = Number(b.dataset.p); salvarUi(); render(); break;
     case "tipo": u.tipo = b.dataset.t; salvarUi(); render(); break;
-    case "autor": u.autor = b.dataset.a; salvarUi(); render(); break;
     case "dia": {
       const d = b.dataset.d;
       u.dia = u.dia === d ? null : d;

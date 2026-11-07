@@ -10,10 +10,11 @@
   --shadow: #1e2120;
   --soft-line: #cfd4cf;
 
-  --bj: #a400ff;          /* roxo do Bjørn */
-  --bj-ink: #7410c4;
-  --bj-wash: #f0e0ff;
-  --bj-on: #ffffff;       /* texto sobre o roxo */
+  /* Uma pessoa só: os tokens "bj" que sobraram apontam para o mesmo verde. */
+  --bj: #46c98f;
+  --bj-ink: #17734b;
+  --bj-wash: #dff5ea;
+  --bj-on: #0d2a1c;
   --yo: #46c98f;          /* verde do Yoshiro */
   --yo-ink: #17734b;
   --yo-wash: #dff5ea;
@@ -43,7 +44,7 @@
   :root:not([data-theme="light"]) {
     --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
     --line: #48504c; --shadow: #000000; --soft-line: #343a37;
-    --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
+    --bj-ink: #63e3a9; --bj-wash: #163428; --yo-ink: #63e3a9; --yo-wash: #163428;
     --festa: #ff7aa8; --festa-wash: #3b1626;
     --est-primavera: #f08cc0; --est-verao: #f5c443; --est-outono: #f0904a; --est-inverno: #74b6f0;
     --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
@@ -53,7 +54,7 @@
 :root[data-theme="dark"] {
   --paper: #121413; --card: #1c1f1e; --sunk: #232726; --ink: #eef1ef; --ink-2: #a9b2ad;
   --line: #48504c; --shadow: #000000; --soft-line: #343a37;
-  --bj-ink: #c98bff; --bj-wash: #2c1840; --yo-ink: #63e3a9; --yo-wash: #163428;
+  --bj-ink: #63e3a9; --bj-wash: #163428; --yo-ink: #63e3a9; --yo-wash: #163428;
   --festa: #ff7aa8; --festa-wash: #3b1626;
   --est-primavera: #f08cc0; --est-verao: #f5c443; --est-outono: #f0904a; --est-inverno: #74b6f0;
   --p3: #ff6b6f; --p3-wash: #3a1a1b; --p2: #f2b33d; --p2-wash: #3a2d12; --p1: #9aa49f; --p1-wash: #262a28;
@@ -114,7 +115,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .gate-oc.bj { background: var(--bj); color: var(--bj-on); }
 .gate-oc.yo { background: var(--yo); color: var(--yo-on); align-items: flex-end; }
 
-/* Foto de perfil: rosto da figurinha, com anel na cor de cada um */
+/* Foto de perfil: rosto da figurinha, com anel verde */
 .mk {
   width: 40px; height: 40px; flex: none; border-radius: 50%; display: block;
   object-fit: cover; border: 3px solid var(--line); background: var(--card);
@@ -154,7 +155,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   padding: 16px var(--gut);
   border-bottom: 2px solid var(--line);
   background:
-    linear-gradient(90deg, var(--bj-wash) 0 18%, transparent 42% 58%, var(--yo-wash) 82% 100%),
+    linear-gradient(90deg, var(--yo-wash) 0 22%, transparent 55%),
     var(--paper);
 }
 .top-oc { display: flex; align-items: center; gap: 12px; }

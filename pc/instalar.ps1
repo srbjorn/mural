@@ -76,7 +76,7 @@ foreach ($a in $atalhos) {
         $lnk.Arguments = "--app=`"$Site$($a.Hash)`" --window-size=1500,950"
     }
     $lnk.IconLocation = $icone
-    $lnk.Description = "Mural Bjørn & Yoshiro"
+    $lnk.Description = "Mural"
     $lnk.Save()
 }
 

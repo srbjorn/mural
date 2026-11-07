@@ -1,6 +1,6 @@
-﻿// Mural na barra de tarefas: os compromissos mais próximos do mural, girando dentro da barra do Windows.
+﻿﻿// Mural na barra de tarefas: os compromissos mais próximos do mural, girando dentro da barra do Windows.
 // Compila com o csc do .NET Framework 4 (C# 5), que já vem no Windows: veja tools/compilar-barra.ps1.
-// Lê o mesmo Firestore do site, com o login de cada um (o token fica protegido pelo Windows/DPAPI).
+// Lê o mesmo Firestore do site, com o login do mural (o token fica protegido pelo Windows/DPAPI).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -447,10 +447,10 @@ namespace Mural
             var h = DateTime.Today;
             return new List<Compromisso> {
                 new Compromisso { Dia = h, Alvo = h.AddHours(23).AddMinutes(30), Autor = "yoshiro", Titulo = "Consulta no dentista", Quando = "Hoje · 23:30", Hora = "23:30" },
-                new Compromisso { Dia = h, Autor = "bjorn", Niver = true, Titulo = "Aniversário de Lucas (faz 30)", Quando = "Hoje!", Hora = "" },
+                new Compromisso { Dia = h, Autor = "yoshiro", Niver = true, Titulo = "Aniversário de Lucas (faz 30)", Quando = "Hoje!", Hora = "" },
                 new Compromisso { Dia = h.AddDays(4), Alvo = h.AddDays(4), Autor = "yoshiro", Niver = true, Titulo = "Aniversário de Mari", Quando = "Em 4 dias", Hora = "" },
                 new Compromisso { Dia = h.AddDays(3), Alvo = h.AddDays(3).AddHours(17), Autor = "", Estacao = Estacao.Proxima(), Titulo = "Começa o verão (exemplo)", Quando = "Em 3 dias", Hora = "" },
-                new Compromisso { Dia = h.AddDays(1), Alvo = h.AddDays(1), Autor = "bjorn", Titulo = "Mercado da semana", Quando = "Amanhã", Hora = "" },
+                new Compromisso { Dia = h.AddDays(1), Alvo = h.AddDays(1), Autor = "yoshiro", Titulo = "Mercado da semana", Quando = "Amanhã", Hora = "" },
                 new Compromisso { Dia = h.AddDays(-1), Autor = "yoshiro", Atrasado = true, Titulo = "Pagar a conta de luz", Quando = "Atrasado", Hora = "" },
             };
         }
@@ -522,7 +522,7 @@ namespace Mural
     /// </summary>
     static class JanelaMural
     {
-        const string Titulo = "Mural Bjørn & Yoshiro";
+        const string Titulo = "Mural";
         delegate bool EnumProc(IntPtr h, IntPtr p);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc proc, IntPtr p);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
@@ -544,7 +544,8 @@ namespace Mural
                 if (!IsWindowVisible(h)) return true;
                 var sb = new StringBuilder(256);
                 GetWindowText(h, sb, 256);
-                if (sb.ToString().StartsWith(Titulo)) lista.Add(h);
+                var t = sb.ToString();
+                if (t == Titulo || t.StartsWith(Titulo + " - ") || t.StartsWith(Titulo + " — ")) lista.Add(h); // janela de app ou aba do navegador
                 return true;
             }, IntPtr.Zero);
             return lista;
@@ -695,8 +696,8 @@ namespace Mural
             entrar.Text = "Entrar";
             entrar.SetBounds(236, 244, 120, 36);
             entrar.FlatStyle = FlatStyle.Flat;
-            entrar.BackColor = Color.FromArgb(164, 0, 255);
-            entrar.ForeColor = Color.White;
+            entrar.BackColor = Color.FromArgb(70, 201, 143);
+            entrar.ForeColor = Color.FromArgb(13, 42, 28);
             entrar.FlatAppearance.BorderSize = 0;
             entrar.Click += Entrar;
             AcceptButton = entrar;
@@ -726,7 +727,6 @@ namespace Mural
 
     class Barra : Form
     {
-        static readonly Color Roxo = Color.FromArgb(164, 0, 255), RoxoClaro = Color.FromArgb(201, 139, 255);
         static readonly Color Verde = Color.FromArgb(70, 201, 143), VerdeClaro = Color.FromArgb(99, 227, 169);
         static readonly Color Vermelho = Color.FromArgb(255, 107, 111), Festa = Color.FromArgb(255, 122, 168);
 
@@ -736,7 +736,7 @@ namespace Mural
         string aviso = "Carregando o mural…";
         int atual;
         float anim = 1f; // 0 → 1 ao trocar de item
-        readonly Image rostoB, rostoY;
+        readonly Image rostoY;
         readonly System.Windows.Forms.Timer tGirar = new System.Windows.Forms.Timer { Interval = 6000 };
         readonly System.Windows.Forms.Timer tAnim = new System.Windows.Forms.Timer { Interval = 15 };
         readonly System.Windows.Forms.Timer tEncaixe = new System.Windows.Forms.Timer { Interval = 1500 };
@@ -772,7 +772,6 @@ namespace Mural
             Text = "Mural";
             try { claro = Convert.ToInt32(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0)) == 1; } catch { }
             BackColor = claro ? Color.FromArgb(243, 243, 243) : Color.FromArgb(38, 41, 40);
-            rostoB = Recurso("rosto_bjorn.png");
             rostoY = Recurso("rosto_yoshiro.png");
 
             var menu = new ContextMenuStrip();
@@ -894,7 +893,7 @@ namespace Mural
                     icone.Click += (a, b) => AbrirMural();
                 }
                 icone.Visible = true;
-                icone.ShowBalloonTip(15000, l.Titulo, QuandoTexto(l) + (l.Autor == "yoshiro" ? " · anotado pelo Yoshiro" : l.Autor == "bjorn" ? " · anotado pelo Bjørn" : ""), ToolTipIcon.Info);
+                icone.ShowBalloonTip(15000, l.Titulo, QuandoTexto(l), ToolTipIcon.Info);
             }
             catch (Exception ex) { Registro.Escrever("não consegui mostrar a notificação: " + ex.Message); }
             piscadas = 120; // pisca por 1 minuto
@@ -1315,13 +1314,13 @@ namespace Mural
 
             // Lembrete que acabou de tocar: o fundo pisca na cor de quem anotou durante 1 minuto.
             if (c != null && c.Destaque && piscaLigado)
-                using (var fundo = new SolidBrush(Color.FromArgb(110, c.Autor == "yoshiro" ? Verde : Roxo)))
+                using (var fundo = new SolidBrush(Color.FromArgb(110, Verde)))
                     g.FillRectangle(fundo, ClientRectangle);
 
             // Rosto de quem anotou, com anel na cor da pessoa
             var azul = Color.FromArgb(77, 163, 255);
-            var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : c.Autor == "yoshiro" ? Verde : Roxo;
-            var rosto = c == null || c.Atualizacao || c.Estacao != null ? null : c.Autor == "yoshiro" ? rostoY : rostoB;
+            var corPessoa = c == null ? apagado : c.Atualizacao ? azul : c.Estacao != null ? c.Estacao.Cor : Verde;
+            var rosto = c == null || c.Atualizacao || c.Estacao != null ? null : rostoY;
             var rf = new Rectangle(pad, pad, face, face);
             if (rosto != null)
             {
@@ -1366,8 +1365,8 @@ namespace Mural
             var resta = c == null ? "" : c.Falta();
             if (resta != "") linha1 = c.Niver && c.Quando != "Hoje!" ? resta : linha1 + " · " + resta;
             var linha2 = c == null ? aviso ?? "" : c.Titulo;
-            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Destaque ? Color.FromArgb(255, 210, 90) : c.Estacao != null ? c.Estacao.Cor : c.Niver ? Festa : c.Atrasado ? Vermelho : (c.Autor == "yoshiro" ? VerdeClaro : RoxoClaro);
-            if (claro && c != null && !c.Niver && !c.Atrasado) cor1 = c.Autor == "yoshiro" ? Color.FromArgb(23, 115, 75) : Color.FromArgb(116, 16, 196);
+            var cor1 = c == null ? apagado : c.Atualizacao ? azul : c.Destaque ? Color.FromArgb(255, 210, 90) : c.Estacao != null ? c.Estacao.Cor : c.Niver ? Festa : c.Atrasado ? Vermelho : VerdeClaro;
+            if (claro && c != null && !c.Niver && !c.Atrasado) cor1 = Color.FromArgb(23, 115, 75);
             var area = new RectangleF(xTexto, 0, Math.Max(10, direita - xTexto), Height);
             using (var f1 = new Font("Segoe UI Semibold", 7.5f))
             using (var f2 = new Font("Segoe UI", 9f))

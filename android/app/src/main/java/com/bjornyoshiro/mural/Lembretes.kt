@@ -122,7 +122,7 @@ object Lembretes {
         )
         val n = NotificationCompat.Builder(ctx, CANAL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setColor(0xFFA400FF.toInt())
+            .setColor(0xFF46C98F.toInt())
             .setContentTitle(if (adiado) "Lembrete: $titulo" else "${quandoTexto(minutos)}: $titulo")
             .setContentText(if (hora.isNotBlank()) "Às $hora" else "Mural")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

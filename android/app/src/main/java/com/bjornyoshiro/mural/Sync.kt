@@ -115,7 +115,7 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
 
         fun montar(todos: List<Item>): Resumo {
             val h = LocalDate.now().toString()
-            // Aniversários: a partir do dia em que cada um pediu para começar a lembrar, sempre no topo.
+            // Aniversários: a partir do dia escolhido para começar a lembrar, sempre no topo.
             val nivers = todos.filter { it.ehNiver && (it.diasParaNiver() ?: 999) <= it.lembrar }.sortedBy { it.diasParaNiver() }
             val pendentes = todos.filter { it.tipo != "aniversario" }
             // Sempre por data (não por importância): atrasados primeiro (a data deles já passou), depois hoje,
@@ -154,7 +154,7 @@ data class Resumo(val logado: Boolean, val hoje: Int, val urgentes: Int, val atr
     }
 }
 
-/** Busca o mural no Firebase, atualiza o widget e avisa das novidades. */
+/** Busca o mural no Firebase, atualiza o widget e agenda os lembretes. */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val ctx = applicationContext
@@ -167,11 +167,9 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
             val db = FirebaseFirestore.getInstance()
             val itens = db.collection("itens").whereEqualTo("feito", false).get().await()
                 .documents.map { Item.de(it) }
-            val eu = db.collection("pessoas").document(user.uid).get().await().getString("quem")
             val resumo = Resumo.montar(itens)
             WidgetDados.salvar(ctx, resumo)
             Lembretes.agendar(ctx, itens)
-            Avisos.novidades(ctx, itens, eu)
             if (inputData.getBoolean("resumoDoDia", false)) Avisos.resumoDoDia(ctx, resumo)
             Atualizacao.verificar(ctx)
             Result.success()

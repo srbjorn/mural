@@ -11,7 +11,6 @@ namespace Mural { static class Versao { public const int Numero = $versao; } }
 & $csc /nologo /target:winexe /optimize+ /codepage:65001 `
     "/out:$raiz\pc\MuralBarra.exe" `
     "/win32icon:$raiz\pc\mural.ico" `
-    "/resource:$res\rosto_bjorn.png,Mural.rosto_bjorn.png" `
     "/resource:$res\rosto_yoshiro.png,Mural.rosto_yoshiro.png" `
     /r:System.Web.Extensions.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll `
     /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `

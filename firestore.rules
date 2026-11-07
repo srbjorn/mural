@@ -1,7 +1,7 @@
 rules_version = '2';
 // Regras do mural (Firebase → Firestore Database → Regras → Publicar).
 //
-// Só entra quem já tem um documento em /pessoas (o Bjørn e o Yoshiro), e ninguém cria documento novo
+// Só entra quem já tem um documento em /pessoas (as contas do mural), e ninguém cria documento novo
 // lá pelo app. Mesmo que alguém consiga criar uma conta, não lê nem escreve nada.
 // O bot do Telegram (firebase-admin) não passa por estas regras.
 //

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Mural</string>
-    <string name="widget_nome">Mural Bjørn &amp; Yoshiro</string>
-    <string name="widget_desc">O que vocês dois anotaram: hoje, urgentes e próximos eventos.</string>
+    <string name="widget_nome">Mural</string>
+    <string name="widget_desc">Hoje, urgentes e próximos eventos do mural.</string>
 </resources>

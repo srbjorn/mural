@@ -1,7 +1,6 @@
-# Mural Bjørn & Yoshiro
+# Mural
 
-Anotações, checklists, eventos, metas e calendário compartilhados entre vocês dois.
-O que um anota aparece para o outro na hora.
+Anotações, checklists, eventos, metas, aniversários e calendário, sincronizados entre o site, o PC e o celular.
 
 | Parte | Onde fica | O que faz |
 |---|---|---|
@@ -18,7 +17,7 @@ O que um anota aparece para o outro na hora.
 4. Em **Firestore → Regras**, cole o conteúdo de `firestore.rules` e clique em **Publicar**.
 5. **Configurações do projeto → Seus apps → Web (`</>`)**, com o apelido `mural-web`. Copie o `firebaseConfig` para `web/firebase-config.js`.
 6. Ainda em **Seus apps → Android**, use o pacote `com.bjornyoshiro.mural`. Baixe o `google-services.json` e salve em `android/app/`.
-7. Cada um abre o mural e cria a sua conta. Depois disso, desligue novas contas em
+7. Abra o mural e crie a conta. Depois disso, desligue novas contas em
    **Authentication → Configurações → Ações do usuário → desmarcar "Ativar criação (inscrição)"**.
 
 ## 2. GitHub
@@ -36,7 +35,7 @@ Baixe o `mural.apk` pelo link acima e instale (o Android pede para permitir apps
 Para pôr o widget, segure a tela inicial → **Widgets → Mural**.
 
 - O widget atualiza a cada 15 minutos e sempre que você mexe no app.
-- O celular notifica quando o outro anota algo, ao ligar o aparelho e todo dia às 8h com o resumo do dia.
+- O celular avisa ao ligar o aparelho, todo dia às 8h com o resumo do dia e nos lembretes antes do horário.
 
 ## 4. PCs
 

@@ -54,7 +54,6 @@ private val LINHA = Color(0xFF2A2E2C)
 private val TEXTO = Color(0xFFF1F3F2)
 private val TEXTO2 = Color(0xFFA9B2AD)
 private val VERDE = Color(0xFF46C98F)
-private val ROXO = Color(0xFFA400FF)
 private val P3 = Color(0xFFFF6B6F)
 private val P2 = Color(0xFFF2B33D)
 private val P1 = Color(0xFF6F7974)
@@ -106,7 +105,7 @@ private fun abrirApp(ctx: Context, extra: String?): Action {
 private fun estilo(cor: Color, tam: Int, negrito: Boolean = false) =
     TextStyle(color = ColorProvider(cor), fontSize = tam.sp, fontWeight = if (negrito) FontWeight.Bold else FontWeight.Normal)
 
-/** Rosto da figurinha (PNG já redondo), com anel na cor de cada um: Bjørn roxo, Yoshiro verde. */
+/** Rosto da figurinha dele (PNG já redondo), com anel verde. */
 @Composable
 private fun Rosto(imagem: Int, nome: String, cor: Color, tam: Int = 34) {
     Box(
@@ -126,13 +125,11 @@ private fun Conteudo(r: Resumo?) {
 
     Column(GlanceModifier.fillMaxSize().background(FUNDO).cornerRadius(22.dp).padding(12.dp)) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Rosto(R.drawable.rosto_bjorn, "Bjørn", ROXO)
-            Spacer(GlanceModifier.width(4.dp))
             Rosto(R.drawable.rosto_yoshiro, "Yoshiro", VERDE)
             Column(GlanceModifier.defaultWeight().padding(horizontal = 10.dp).clickable(abrir)) {
                 Text(hoje, style = estilo(TEXTO, 16, true), maxLines = 1)
                 val sub = when {
-                    r == null || !r.logado -> "Mural Bjørn & Yoshiro"
+                    r == null || !r.logado -> "Mural"
                     else -> buildList {
                         add("${r.hoje} pra hoje")
                         if (r.urgentes > 0) add("${r.urgentes} urgente" + if (r.urgentes > 1) "s" else "")
@@ -170,13 +167,12 @@ private fun Aviso(texto: String, abrir: Action) {
 private fun Linha(it: Item, abrir: Action) {
     val dias = it.diasParaNiver()
     val corPrio = if (dias != null) FESTA else when (it.prioridade) { 3 -> P3; 2 -> P2; else -> P1 }
-    val corAutor = if (it.autor == "yoshiro") VERDE else ROXO
+    val corAutor = VERDE
     val tipo = when (it.tipo) { "checklist" -> "Checklist"; "evento" -> "Evento"; "meta" -> "Meta"; "aniversario" -> "Aniversário"; else -> "Anotação" }
     val detalhe = buildString {
         append(tipo)
         it.idade()?.let { idade -> append(" · faz $idade") }
         if (it.total > 0) append(" · ${it.feitos}/${it.total}")
-        append(if (it.autor == "yoshiro") " · Yoshiro" else " · Bjørn")
     }
     val h = LocalDate.now().toString()
     val quando = when {

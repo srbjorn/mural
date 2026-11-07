@@ -15,29 +15,6 @@ import androidx.core.content.ContextCompat
 
 object Avisos {
     private const val CANAL = "mural"
-    private val NOME = mapOf("bjorn" to "Bjørn", "yoshiro" to "Yoshiro")
-
-    /** Notifica o que o outro anotou desde a última sincronização. */
-    fun novidades(ctx: Context, itens: List<Item>, eu: String?) {
-        val prefs = ctx.getSharedPreferences("mural", Context.MODE_PRIVATE)
-        val ultimo = prefs.getLong("ultimoVisto", 0L)
-        val maior = maxOf(itens.maxOfOrNull { it.criadoEm } ?: 0L, ultimo)
-        if (ultimo == 0L) {
-            // Primeira vez neste celular: não despeja o mural inteiro como novidade.
-            prefs.edit().putLong("ultimoVisto", maxOf(maior, System.currentTimeMillis())).apply()
-            return
-        }
-        if (eu != null) {
-            val novos = itens.filter { it.criadoEm > ultimo && it.autor.isNotEmpty() && it.autor != eu }
-            if (novos.isNotEmpty()) {
-                val quem = NOME[novos.first().autor] ?: "Alguém"
-                val titulo = if (novos.size == 1) "$quem anotou no mural" else "$quem anotou ${novos.size} coisas"
-                mostrar(ctx, 2, titulo, novos.joinToString("\n") { "• " + it.titulo }, "aviso")
-            }
-        }
-        if (maior > ultimo) prefs.edit().putLong("ultimoVisto", maior).apply()
-    }
-
     fun resumoDoDia(ctx: Context, r: Resumo) {
         val partes = buildList {
             add("${r.hoje} pra hoje")
@@ -81,7 +58,7 @@ object Avisos {
         )
         val n = NotificationCompat.Builder(ctx, CANAL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setColor(0xFFA400FF.toInt())
+            .setColor(0xFF46C98F.toInt())
             .setContentTitle(titulo)
             .setContentText(texto.lineSequence().first())
             .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
